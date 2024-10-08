@@ -24,6 +24,7 @@ include (${PROJECT_SOURCE_DIR}/cmake/CPM.cmake)
 CPMUsePackageLock (${PROJECT_SOURCE_DIR}/cmake/package-lock.cmake)
 
 CPMGetPackage (seqan3)
+CPMGetPackage (plog)
 
 # -----------------------------------------------------------------------------
 # install
@@ -41,7 +42,7 @@ file(GLOB_RECURSE SRC_FILES
 
 add_executable(${PROJECT_NAME} ${SRC_FILES})
 
-target_link_libraries(${PROJECT_NAME} seqan3::seqan3)
+target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog)
 
 # enable_testing()
 # add_subdirectory(test)

@@ -6,20 +6,29 @@
 # This file should be committed to version control
 
 # seqan3
-set (CHOPPER_SEQAN3_VERSION 6b681fb2eae5ab2997d293e99fc6a7f869a20316)
+set (SEQAN3_VERSION 6b681fb2eae5ab2997d293e99fc6a7f869a20316)
 CPMDeclarePackage (seqan3
                    NAME seqan3
-                   GIT_TAG ${CHOPPER_SEQAN3_VERSION}
+                   GIT_TAG ${SEQAN3_VERSION}
                    GITHUB_REPOSITORY seqan/seqan3
                    SYSTEM TRUE
                    EXCLUDE_FROM_ALL TRUE
                    OPTIONS "INSTALL_SEQAN3 OFF" "CMAKE_MESSAGE_LOG_LEVEL WARNING"
 )
+set (PLOG_VERSION e21baecd4753f14da64ede979c5a19302618b752)
+CPMDeclarePackage (plog
+                   NAME plog
+                   GIT_TAG ${PLOG_VERSION}
+                   GITHUB_REPOSITORY SergiusTheBest/plog
+                   SYSTEM TRUE
+                   EXCLUDE_FROM_ALL TRUE
+                   OPTIONS "INSTALL_PLOG OFF" "CMAKE_MESSAGE_LOG_LEVEL WARNING"
+)
 # googletest
-set (CHOPPER_GOOGLETEST_VERSION 1.15.2)
+set (GOOGLETEST_VERSION 1.15.2)
 CPMDeclarePackage (googletest
                    NAME googletest
-                   VERSION ${CHOPPER_GOOGLETEST_VERSION}
+                   VERSION ${GOOGLETEST_VERSION}
                    GITHUB_REPOSITORY google/googletest
                    SYSTEM TRUE
                    EXCLUDE_FROM_ALL TRUE
