@@ -12,7 +12,7 @@
 
 using namespace seqan3::literals;
 
-int main()
+int app_main()
 {
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{8u},
                                          seqan3::bin_size{8192u},
@@ -20,7 +20,7 @@ int main()
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{4}}, seqan3::window_size{5});
 
-    auto fasta_file = std::filesystem::current_path() / "my.fasta";
+    auto fasta_file = "../../my.fasta";
     seqan3::sequence_file_input fin{fasta_file};
 
     for (auto & record : fin)

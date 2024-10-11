@@ -40,7 +40,9 @@ file(GLOB_RECURSE SRC_FILES
         ${PROJECT_SOURCE_DIR}/src/*.cpp
 )
 
-add_executable(${PROJECT_NAME} ${SRC_FILES})
+add_executable(${PROJECT_NAME} ${SRC_FILES}
+        src/main.cpp
+)
 
 target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog)
 

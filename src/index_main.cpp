@@ -1,6 +1,19 @@
+#include <unordered_map>
+#include <iostream>
+#include <fstream>
+#include <string>
+
 #include "index_main.hpp"
+#include "utils.hpp"
+
 #include <plog/Log.h>
-#include "plog/Initializers/RollingFileInitializer.h"
+#include <plog/Initializers/RollingFileInitializer.h>
+#include <seqan3/core/debug_stream.hpp>
+#include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
+#include <seqan3/search/views/minimiser_hash.hpp>
+
+using namespace seqan3::literals;
 
 void setup_index_subcommand(CLI::App& app)
 {
@@ -10,6 +23,7 @@ void setup_index_subcommand(CLI::App& app)
 
     index_subcommand->add_option("<input>", opt->input_file, "Tab separated file with columns for filename and category")
         ->required()
+        ->transform(make_absolute)
         ->check(CLI::ExistingFile.description(""))
         ->type_name("FILE");
 
@@ -50,8 +64,8 @@ int sifter_index(IndexOptions const& opt)
     }
     plog::init(log_level, "sifter.log", 1000000, 5);
 
-    if (opt.window_size > opt.kmer_size) {
-        throw std::logic_error("W must NOT be greater than K");
+    if (opt.window_size < opt.kmer_size) {
+        throw std::logic_error("W must be greater than K");
     }
     if (opt.window_size <= 0) {
         throw std::logic_error("W must be a positive integer");
@@ -61,5 +75,89 @@ int sifter_index(IndexOptions const& opt)
     }
 
     LOG_INFO << "Hello log!";
+    PLOG_VERBOSE << "verbose";
+    PLOG_DEBUG << "debug";
+    PLOG_INFO << "info";
+    PLOG_WARNING << "warning";
+    PLOG_ERROR << "error";
+    PLOG_FATAL << "fatal";
+    PLOG_NONE << "none";
+
+    auto input = parse_input_file(opt.input_file);
+    auto ibf = construct_ibf(input, opt.window_size, opt.kmer_size);
+
     return 0;
+}
+
+input parse_input_file(const std::filesystem::path& input_file){
+    PLOG_INFO << "Parsing input file " << input_file;
+    std::unordered_map<std::string, uint8_t> filepath_to_bin;
+    std::unordered_map<uint8_t, std::string> bin_to_name;
+    std::unordered_map<std::string, uint8_t> name_to_bin;
+    uint8_t next_bin = 0;
+
+    std::ifstream input_ifstream;
+    input_ifstream.open(input_file);
+    if (!input_ifstream.is_open()) {
+        PLOG_ERROR << "Error opening file " << input_file;
+        exit(1);
+    }
+
+    std::string line;
+    while (std::getline(input_ifstream, line))
+    {
+        if (!line.empty()) {
+            auto parts = split(line, "\t");
+            if (parts.size() >= 2) {
+                auto path = parts[0];
+                auto name = make_absolute(parts[1]).string();
+                auto found_bin = name_to_bin.find(name);
+                if (found_bin == name_to_bin.end()){
+                    name_to_bin[name] = next_bin;
+                    bin_to_name[next_bin] = name;
+                    next_bin++;
+                }
+                auto bin = name_to_bin[name];
+                filepath_to_bin[path] = bin;
+            }
+        }
+    }
+    input_ifstream.close();
+
+    PLOG_INFO << "Found " << filepath_to_bin.size() << " files corresponding to " << bin_to_name.size() << " bins";
+
+    return input {filepath_to_bin, bin_to_name};
+}
+
+seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> construct_ibf(const input& input, const uint8_t& w, const uint8_t& k){
+    PLOG_INFO << "Building IBF from files";
+
+    seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{8u},
+                                         seqan3::bin_size{8192u},
+                                         seqan3::hash_function_count{2u}};
+
+    auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{k}}, seqan3::window_size{w});
+
+    for (const auto& pair : input.filepath_to_bin) {
+        const auto& fasta_file = pair.first;
+        const auto& bin = pair.second;
+
+        PLOG_INFO << "Adding file " << fasta_file;
+        seqan3::sequence_file_input fin{fasta_file};
+
+        auto record_count = 0;
+        for (auto & record : fin)
+        {
+            for (auto && value : record.sequence() | hash_adaptor)
+                ibf.emplace(value, seqan3::bin_index{bin});
+                record_count++;
+        }
+        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << bin << std::endl;
+
+    }
+
+    // Construct an immutable, compressed Interleaved Bloom Filter.
+    seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> ibf2{ibf};
+
+    return ibf2;
 }
