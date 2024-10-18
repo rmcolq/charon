@@ -44,6 +44,18 @@ class ReadEntry
                 }
             }
         };
+        void print_result(){
+            std::cout << read_id_ << "\t" << num_hashes_ << "\t";
+            for (auto i=0; i<counts_.rows(); i++){
+                std::cout << +i << ":" << counts_(i,i) << "\t";
+            }
+            for (auto i=0; i<counts_.rows(); i++){
+                for (auto j=0; j<i; j++) {
+                    std::cout << +i << "x" << +j << ":" << counts_(i, j) << "\t";
+                }
+            }
+            std::cout << std::endl;
+        };
     };
 
 #endif // SIFTER_ENTRY_H

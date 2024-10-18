@@ -17,6 +17,7 @@ class Index
     private:
         uint8_t window_size_{};
         uint8_t kmer_size_{};
+        uint8_t num_bins_{};
         double fpr_{};
         InputSummary summary_{};
         std::unordered_map<uint8_t, std::string> bin_to_name_{};
@@ -35,6 +36,7 @@ class Index
         Index(const IndexArguments & arguments, const InputSummary & summary, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
             window_size_{arguments.window_size},
             kmer_size_{arguments.kmer_size},
+            num_bins_{arguments.bins},
             fpr_{arguments.fpr},
             summary_{summary},
             //bin_to_name_{input.bin_to_name},
@@ -49,6 +51,11 @@ class Index
         uint8_t kmer_size() const
         {
             return kmer_size_;
+        }
+
+        uint8_t num_bins() const
+        {
+            return num_bins_;
         }
 
         double fpr() const
@@ -76,6 +83,11 @@ class Index
             return ibf_;
         }
 
+        seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed>::membership_agent_type agent() const
+        {
+            return ibf_.membership_agent();
+        }
+
         /*!\cond DEV
          * \brief Serialisation support function.
          * \tparam archive_t Type of `archive`; must satisfy seqan3::cereal_archive.
@@ -91,6 +103,7 @@ class Index
                 {
                     archive(window_size_);
                     archive(kmer_size_);
+                    archive(num_bins_);
                     archive(fpr_);
                     //archive(summary_);
                     //archive(bin_to_name_);
@@ -119,6 +132,7 @@ class Index
                 {
                     archive(window_size_);
                     archive(kmer_size_);
+                    archive(num_bins_);
                     archive(fpr_);
                     //archive(summary_);
                     //archive(bin_to_name_);

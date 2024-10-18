@@ -33,6 +33,12 @@ class Result
             }
             entries[read_id].update_entry(entry);
         };
+
+        void print_result(const std::string read_id) {
+            if (entries.find(read_id) != entries.end()) {
+                entries[read_id].print_result();
+            }
+        };
     };
 
 #endif // SIFTER_RESULT_H
