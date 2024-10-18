@@ -4,8 +4,6 @@
 #pragma once
 #include <unordered_map>
 #include <string>
-#include <filesystem>
-#include <fstream>
 
 #include <cereal/types/string.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
@@ -159,19 +157,5 @@ class Index
         }
         //!\endcond
     };
-
-static inline void store_index(std::filesystem::path const & path, Index && index)
-{
-    std::ofstream os{path, std::ios::binary};
-    cereal::BinaryOutputArchive oarchive{os};
-    oarchive(index);
-}
-
-void load_index(Index & index, std::filesystem::path const & path)
-{
-    std::ifstream is{path, std::ios::binary};
-    cereal::BinaryInputArchive iarchive{is};
-    iarchive(index);
-}
 
 #endif // SIFTER_INDEX_H

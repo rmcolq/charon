@@ -6,6 +6,7 @@
 
 #include "index_main.hpp"
 #include "index.hpp"
+#include "store_index.hpp"
 #include "utils.hpp"
 
 #include <plog/Log.h>
@@ -14,10 +15,7 @@
 #include <seqan3/io/sequence_file/input.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 #include <seqan3/search/views/minimiser_hash.hpp>
-//#include <hibf/build/bin_size_in_bits.hpp>
 
-
-//using namespace seqan3::literals;
 
 void setup_index_subcommand(CLI::App& app)
 {
@@ -229,11 +227,6 @@ int index_main(IndexArguments & opt)
     auto summary = summarise_input(input, opt);
     auto index = build_index(input, summary, opt);
     store_index(opt.prefix, std::move(index));
-
-
-    auto index2 = Index();
-    load_index(index2, opt.prefix);
-    std::cout << index2.kmer_size() << std::endl;
 
     return 0;
 }

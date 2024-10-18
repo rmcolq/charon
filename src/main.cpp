@@ -3,6 +3,7 @@
 #include "CLI11.hpp"
 
 #include "index_main.hpp"
+#include "classify_main.hpp"
 #include "version.hpp"
 
 class MyFormatter : public CLI::Formatter {
@@ -55,6 +56,8 @@ int main(int argc, char* argv[])
         throw(CLI::Success {});
     });
     setup_index_subcommand(app);
+    setup_classify_subcommand(app);
+
 
     app.require_subcommand();
 

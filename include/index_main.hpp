@@ -5,7 +5,6 @@
 #include <cstring>
 
 #include "CLI11.hpp"
-#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
 class Index;
 
