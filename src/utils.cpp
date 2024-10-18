@@ -1,7 +1,5 @@
 #include "utils.hpp"
 
-#include <string_view>
-
 std::filesystem::path make_absolute(std::filesystem::path path) { return std::filesystem::absolute(path); }
 
 std::vector<std::string> split(const std::string& s, const std::string& delimiter){
@@ -17,12 +15,12 @@ std::vector<std::string> split(const std::string& s, const std::string& delimite
     return substrings;
 }
 
-/*static bool ends_with(std::string_view str, std::string_view suffix)
+bool ends_with(std::string str, std::string suffix)
 {
     return str.size() >= suffix.size() && str.compare(str.size()-suffix.size(), suffix.size(), suffix) == 0;
 }
 
-static bool starts_with(std::string_view str, std::string_view prefix)
+bool starts_with(std::string str, std::string prefix)
 {
     return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
-}*/
+}

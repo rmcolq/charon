@@ -55,9 +55,9 @@ int classify_main(ClassifyArguments & opt)
     }
     plog::init(log_level, opt.log_file.c_str(), 1000000, 5);
 
-    /*if (ends_with(opt.db.c_str(), ".idx")) {
+    if (ends_with(opt.db, ".idx")) {
         opt.db += ".idx";
-    }*/
+    }
 
     LOG_INFO << "Hello log!";
     PLOG_VERBOSE << "verbose";
