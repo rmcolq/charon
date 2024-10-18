@@ -1,5 +1,6 @@
 #include <filesystem>
 #include <fstream>
+#include <cereal/archives/binary.hpp>
 
 #include <index.hpp>
 

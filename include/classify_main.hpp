@@ -6,6 +6,10 @@
 
 #include "CLI11.hpp"
 
+#include "result.hpp"
+
+class Index;
+
 
 /// Collection of all options of index subcommand.
 struct ClassifyArguments {
@@ -20,6 +24,8 @@ struct ClassifyArguments {
 };
 
 void setup_classify_subcommand(CLI::App& app);
+
+Result classify_reads(const Index& index, const ClassifyArguments& opt);
 
 int classify_main(ClassifyArguments & opt);
 

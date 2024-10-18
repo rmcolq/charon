@@ -9,6 +9,9 @@
 
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
+#include <seqan3/search/views/minimiser_hash.hpp>
+#include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
 
 void setup_classify_subcommand(CLI::App& app)
@@ -43,6 +46,26 @@ void setup_classify_subcommand(CLI::App& app)
     classify_subcommand->callback([opt]() { classify_main(*opt); });
 }
 
+Result classify_reads(const Index& index, const ClassifyArguments& opt){
+    auto result = Result(index.summary().num_bins);
+
+    auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
+    auto agent = index.ibf().membership_agent();
+
+    PLOG_INFO << "Classifying file " << opt.read_file;
+    seqan3::sequence_file_input fin{opt.read_file};
+
+    for (auto & record : fin)
+    {
+        for (auto && value : record.sequence() | hash_adaptor)
+        {
+            auto & entry = agent.bulk_contains(value);
+            result.update_entry(record.id(), entry);
+        }
+
+    }
+
+}
 
 
 int classify_main(ClassifyArguments & opt)
@@ -71,6 +94,8 @@ int classify_main(ClassifyArguments & opt)
     auto index = Index();
     load_index(index, opt.db);
     std::cout << index.kmer_size() << std::endl;
+
+    auto result = classify_reads(index, opt);
 
     return 0;
 }

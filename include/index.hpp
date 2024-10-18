@@ -32,14 +32,6 @@ class Index
         Index & operator=(Index &&) = default;
         ~Index() = default;
 
-        /*Index(const Input& input, InputOptions const & arguments, const IndexSummary& summary, const seqan3::interleaved_bloom_filter<>& ibf):
-            window_size_{arguments.window_size},
-            kmer_size_{arguments.kmer_size},
-            fpr_{arguments.fpr},
-            summary_{summary},
-            bin_to_name_{input.bin_to_name},
-            ibf_{ibf}
-            {}*/
         Index(const IndexArguments & arguments, const InputSummary & summary, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
             window_size_{arguments.window_size},
             kmer_size_{arguments.kmer_size},
@@ -73,6 +65,11 @@ class Index
         {
             return bin_to_name_;
         }
+
+        /*seqan3::interleaved_bloom_filter<> & ibf()
+        {
+            return ibf_;
+        }*/
 
         seqan3::interleaved_bloom_filter<> const & ibf() const
         {
