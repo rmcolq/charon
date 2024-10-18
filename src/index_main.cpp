@@ -182,10 +182,10 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
                 ibf.emplace(value, seqan3::bin_index{bin});
             record_count++;
         }
-        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << static_cast<uint16_t>(bin) << std::endl;
+        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << bin << std::endl;
     }
 
-    return Index(opt, ibf);
+    return Index(opt, summary, ibf);
 }
 
 

@@ -47,7 +47,7 @@ void setup_index_subcommand(CLI::App& app);
 
 InputFileMap parse_input_file(const std::filesystem::path& input_file);
 
-InputSummary summarise_input(const InputFileMap& input, const IndexArguments& opt);
+InputSummary summarise_input(const InputFileMap& input, const InputSummary& summary, const IndexArguments& opt);
 
 Index build_index(const InputFileMap& input, InputSummary& summary, const IndexArguments& opt);
 

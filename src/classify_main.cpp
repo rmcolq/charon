@@ -30,7 +30,7 @@ void setup_classify_subcommand(CLI::App& app)
 
     classify_subcommand->add_option("--db", opt->db, "Prefix for the index.")
         ->type_name("FILE")
-        ->check(CLI::NonexistentPath.description(""));
+        ->check(CLI::ExistingPath.description(""));
 
     classify_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
