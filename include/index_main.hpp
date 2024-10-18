@@ -7,32 +7,52 @@
 #include "CLI11.hpp"
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
-#include "index.hpp"
+class Index;
 
 /// Collection of all options of index subcommand.
-struct IndexOptions {
+struct IndexArguments {
+    // IO options
     std::string input_file;
+    std::string prefix;
+
+    // kmer/sketching
     uint8_t window_size { 31 };
     uint8_t kmer_size { 15 };
+
+    // IBF options
+    uint8_t bins {2};
+    mutable uint64_t bits {4096}; // Allow to change bits for each partition
+    uint8_t hash {2};
     double fpr {0.05};
-    std::string prefix;
+
+    // General options
+    std::string log_file {"sifter.log"};
     uint8_t threads { 1 };
     uint8_t verbosity { 0 };
 };
 
-struct Input;
-struct InputOptions;
-
-struct Input {
+struct InputFileMap {
     std::unordered_map<std::string, uint8_t> filepath_to_bin;
     std::unordered_map<uint8_t, std::string> bin_to_name;
 };
 
+struct InputSummary
+{
+    uint8_t num_bins                                        = 0;
+    uint32_t num_files                                      = 0;
+    std::unordered_map<uint8_t, uint64_t> records_per_bin   = {};
+    std::unordered_map<uint8_t, uint64_t> hashes_per_bin    = {};
+};
+
 void setup_index_subcommand(CLI::App& app);
-int build_index(IndexOptions const& opt);
 
-Input parse_input_file(const std::filesystem::path& input_file);
+InputFileMap parse_input_file(const std::filesystem::path& input_file);
 
-seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> construct_ibf(const Input& , const uint8_t& , const uint8_t& );
+InputSummary summarise_input(const InputFileMap& input, const IndexArguments& opt);
+
+Index build_index(const InputFileMap& input, InputSummary& summary, const IndexArguments& opt);
+
+int index_main(IndexArguments & opt);
+
 
 #endif // SIFTER_INDEX_MAIN_H

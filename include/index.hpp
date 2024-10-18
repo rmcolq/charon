@@ -4,53 +4,52 @@
 #pragma once
 #include <unordered_map>
 #include <string>
+#include <filesystem>
+#include <fstream>
 
 #include <cereal/types/string.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 #include <plog/Log.h>
 
-
 #include <index_main.hpp>
 
-struct IndexSummary
-{
-    uint8_t bins                        = 0;
-    uint32_t files                      = 0;
-    uint64_t records                  = 0;
-    std::unordered_map<uint8_t, uint64_t> kmers_per_bin = {};
-};
 
-
-class sifter_index
+class Index
 {
     private:
-        friend class sifter_index;
-
         uint8_t window_size_{};
         uint8_t kmer_size_{};
         double fpr_{};
-        IndexSummary summary_{};
+        //IndexSummary summary_{};
         std::unordered_map<uint8_t, std::string> bin_to_name_{};
         seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> ibf_{};
 
     public:
         static constexpr uint32_t version{3u};
 
-        sifter_index() = default;
-        sifter_index(sifter_index const &) = default;
-        sifter_index(sifter_index &&) = default;
-        sifter_index & operator=(sifter_index const &) = default;
-        sifter_index & operator=(sifter_index &&) = default;
-        ~sifter_index() = default;
+        Index() = default;
+        Index(Index const &) = default;
+        Index(Index &&) = default;
+        Index & operator=(Index const &) = default;
+        Index & operator=(Index &&) = default;
+        ~Index() = default;
 
-        sifter_index(const Input& input, InputOptions const & arguments, const IndexSummary& summary, const seqan3::interleaved_bloom_filter<>& ibf):
+        /*Index(const Input& input, InputOptions const & arguments, const IndexSummary& summary, const seqan3::interleaved_bloom_filter<>& ibf):
             window_size_{arguments.window_size},
             kmer_size_{arguments.kmer_size},
             fpr_{arguments.fpr},
             summary_{summary},
             bin_to_name_{input.bin_to_name},
             ibf_{ibf}
-            {}
+            {}*/
+        Index(const IndexArguments & arguments, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
+            window_size_{arguments.window_size},
+            kmer_size_{arguments.kmer_size},
+            fpr_{arguments.fpr},
+            //summary_{summary},
+            //bin_to_name_{input.bin_to_name},
+            ibf_(ibf)
+        {}
 
         uint8_t window_size() const
         {
@@ -67,22 +66,17 @@ class sifter_index
             return fpr_;
         }
 
-        IndexSummary summary() const
+        /*IndexSummary summary() const
         {
             return summary_;
-        }
+        }*/
 
         std::unordered_map<uint8_t, std::string> bin_to_name() const
         {
             return bin_to_name_;
         }
 
-        seqan3::interleaved_bloom_filter & ibf()
-        {
-            return ibf_;
-        }
-
-        seqan3::interleaved_bloom_filter const & ibf() const
+        seqan3::interleaved_bloom_filter<> const & ibf() const
         {
             return ibf_;
         }
@@ -98,17 +92,17 @@ class sifter_index
         template <seqan3::cereal_archive archive_t>
         void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t & archive)
         {
-            uint32_t parsed_version{sifter_index<>::version};
+            uint32_t parsed_version{Index::version};
             archive(parsed_version);
-            if (parsed_version == sifter_index<>::version)
+            if (parsed_version == Index::version)
             {
                 try
                 {
                     archive(window_size_);
                     archive(kmer_size_);
                     archive(fpr_);
-                    archive(summary_);
-                    archive(bin_to_name_);
+                    //archive(summary_);
+                    //archive(bin_to_name_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START
@@ -145,8 +139,8 @@ class sifter_index
                     archive(window_size_);
                     archive(kmer_size_);
                     archive(fpr_);
-                    archive(summary_);
-                    archive(bin_to_name_);
+                    //archive(summary_);
+                    //archive(bin_to_name_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START
@@ -166,5 +160,18 @@ class sifter_index
         //!\endcond
     };
 
+static inline void store_index(std::filesystem::path const & path, Index && index)
+{
+    std::ofstream os{path, std::ios::binary};
+    cereal::BinaryOutputArchive oarchive{os};
+    oarchive(index);
+}
+
+void load_index(Index & index, std::filesystem::path const & path)
+{
+    std::ifstream is{path, std::ios::binary};
+    cereal::BinaryInputArchive iarchive{is};
+    iarchive(index);
+}
 
 #endif // SIFTER_INDEX_H
