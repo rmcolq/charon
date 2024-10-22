@@ -2,6 +2,7 @@
 #define SIFTER_ENTRY_H
 
 #pragma once
+
 #include <string>
 
 #include <plog/Log.h>
@@ -28,18 +29,27 @@ class ReadEntry
             {counts_.set_size(num_bins);}
 
         void update_entry(const auto & entry){
+            /*PLOG_DEBUG << " entry [";
+            for (const auto i : entry){
+                PLOG_DEBUG << i;
+            }
+            PLOG_DEBUG << "]" ;*/
+
             num_hashes_ += 1;
-            for (const auto i: entry)
+            for (auto i=0; i<entry.size(); ++i)
             {
-                if (i == 0){
+                const auto row = entry[i];
+                PLOG_DEBUG << "row " << i << " " << row;
+                if (row == 0){
                     continue;
                 }
-                for (const auto j: entry){
-                    if (j == 0){
-                        continue;
-                    } else if ( i < j ){
+                for (auto j=0; j<=i; ++j){
+                    const auto col = entry[j];
+                    PLOG_DEBUG << "col " << j << " " << col;
+                    if (col == 0){
                         continue;
                     }
+                    PLOG_DEBUG << "(" << i << "," << j << ")";
                     counts_(i,j) += 1;
                 }
             }

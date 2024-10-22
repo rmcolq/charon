@@ -2,6 +2,7 @@
 #define SIFTER_INDEX_H
 
 #pragma once
+
 #include <unordered_map>
 #include <string>
 

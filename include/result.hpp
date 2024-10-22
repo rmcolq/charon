@@ -2,6 +2,7 @@
 #define SIFTER_RESULT_H
 
 #pragma once
+
 #include <string>
 
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
@@ -28,6 +29,11 @@ class Result
         {};
 
         void update_entry(const std::string read_id, const auto & entry){
+            /*std::cout << read_id << " ";
+            for (const auto i : entry){
+                std:: cout << +i;
+            }
+            std::cout << std::endl;*/
             if (entries.find(read_id) == entries.end()){
                 entries[read_id] = ReadEntry(read_id, num_bins_);
             }

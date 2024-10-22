@@ -1,6 +1,8 @@
 #ifndef SIFTER_CLASSIFY_MAIN_H
 #define SIFTER_CLASSIFY_MAIN_H
 
+#pragma once
+
 #include <omp.h>
 #include <cstring>
 
@@ -16,6 +18,7 @@ struct ClassifyArguments {
     // IO options
     std::string read_file;
     std::string db;
+    uint8_t chunk_size { 100 };
 
     // General options
     std::string log_file {"sifter.log"};

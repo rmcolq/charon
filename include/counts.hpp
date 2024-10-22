@@ -1,6 +1,8 @@
 #ifndef SIFTER_COUNTS_H
 #define SIFTER_COUNTS_H
 
+#pragma once
+
 #include <iostream>
 #include <vector>
 #include <cassert>

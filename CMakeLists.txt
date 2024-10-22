@@ -2,7 +2,7 @@
 # sifter
 # =============================================================================
 set(PROJECT_NAME_STR sifter)
-cmake_minimum_required( VERSION 3.4 FATAL_ERROR )
+cmake_minimum_required( VERSION 3.9 FATAL_ERROR )
 project( ${PROJECT_NAME_STR} VERSION 0.0.1 LANGUAGES CXX )
 
 # -----------------------------------------------------------------------------
@@ -26,6 +26,9 @@ CPMUsePackageLock (${PROJECT_SOURCE_DIR}/cmake/package-lock.cmake)
 CPMGetPackage (seqan3)
 CPMGetPackage (plog)
 
+# Require OPENMP
+find_package(OpenMP REQUIRED)
+
 # -----------------------------------------------------------------------------
 # install
 # -----------------------------------------------------------------------------
@@ -44,7 +47,8 @@ add_executable(${PROJECT_NAME} ${SRC_FILES}
         src/main.cpp
 )
 
-target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog)
+target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog OpenMP::OpenMP_CXX)
+#target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog)
 
 # enable_testing()
 # add_subdirectory(test)

@@ -1,6 +1,8 @@
 #ifndef SIFTER_INDEX_MAIN_H
 #define SIFTER_INDEX_MAIN_H
 
+#pragma once
+
 #include <omp.h>
 #include <cstring>
 
@@ -15,8 +17,8 @@ struct IndexArguments {
     std::string prefix;
 
     // kmer/sketching
-    uint8_t window_size { 31 };
-    uint8_t kmer_size { 15 };
+    uint8_t window_size { 41 };
+    uint8_t kmer_size { 19 };
 
     // IBF options
     uint8_t bins {2};
@@ -31,7 +33,7 @@ struct IndexArguments {
 };
 
 struct InputFileMap {
-    std::unordered_map<std::string, uint8_t> filepath_to_bin;
+    std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
     std::unordered_map<uint8_t, std::string> bin_to_name;
 };
 

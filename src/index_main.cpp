@@ -63,7 +63,7 @@ void setup_index_subcommand(CLI::App& app)
 InputFileMap parse_input_file(const std::filesystem::path& input_file){
     std::cout << "Parsing input file " << std::endl;
     PLOG_INFO << "Parsing input file " << input_file;
-    std::unordered_map<std::string, uint8_t> filepath_to_bin;
+    std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
     std::unordered_map<uint8_t, std::string> bin_to_name;
     std::unordered_map<std::string, uint8_t> name_to_bin;
     uint8_t next_bin = 0;
@@ -90,7 +90,7 @@ InputFileMap parse_input_file(const std::filesystem::path& input_file){
                     next_bin++;
                 }
                 auto bin = name_to_bin[name];
-                filepath_to_bin[path] = bin;
+                filepath_to_bin.emplace_back(std::make_pair(path, bin));
             }
         }
     }
@@ -146,13 +146,13 @@ InputSummary summarise_input(const InputFileMap& input, const IndexArguments& op
     }
     opt.bits = max_count;
 
-    /*std::cout << "num_bins: " << summary.num_bins << ", num_files: " << summary.num_files << std::endl;
+    std::cout << "num_bins: " << +summary.num_bins << ", num_files: " << summary.num_files << std::endl;
     for (const auto& item: summary.records_per_bin){
-        std::cout << "Bin " << item.first << " has " << item.second << " records" << std::endl;
+        std::cout << "Bin " << +item.first << " has " << item.second << " records" << std::endl;
     }
     for (const auto& item: summary.hashes_per_bin){
-        std::cout << "Bin " << item.first << " has " << item.second << " hashes" << std::endl;
-    }*/
+        std::cout << "Bin " << +item.first << " has " << item.second << " hashes" << std::endl;
+    }
 
     return summary;
 }
@@ -160,13 +160,14 @@ InputSummary summarise_input(const InputFileMap& input, const IndexArguments& op
 Index build_index(const InputFileMap& input, InputSummary& summary, const IndexArguments& opt)
 {
     PLOG_INFO << "Build index from files";
-    auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
+    const auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
 
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{summary.num_bins},
                                          seqan3::bin_size{opt.bits},
                                          seqan3::hash_function_count{2u}};
 
-    for (const auto& pair : input.filepath_to_bin) {
+#pragma omp parallel for
+    for (const auto pair : input.filepath_to_bin) {
         const auto& fasta_file = pair.first;
         const auto& bin = pair.second;
 
@@ -175,14 +176,14 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
         summary.num_files += 1;
 
         auto record_count = 0;
-        for (auto & record : fin)
+        for (const auto & record : fin)
         {
             summary.records_per_bin[bin] += 1;
             for (auto && value : record.sequence() | hash_adaptor)
                 ibf.emplace(value, seqan3::bin_index{bin});
             record_count++;
         }
-        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << bin << std::endl;
+        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << +bin << std::endl;
     }
 
     return Index(opt, summary, ibf);

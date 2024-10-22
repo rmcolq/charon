@@ -1,3 +1,8 @@
+#ifndef SIFTER_LOAD_INDEX_H
+#define SIFTER_LOAD_INDEX_H
+
+#pragma once
+
 #include <filesystem>
 #include <fstream>
 #include <cereal/archives/binary.hpp>
@@ -12,3 +17,5 @@ void load_index(Index & index, std::filesystem::path const & path)
     iarchive(index);
     PLOG_INFO << "Index loaded";
 }
+
+#endif // SIFTER_LOAD_INDEX_MAIN_H

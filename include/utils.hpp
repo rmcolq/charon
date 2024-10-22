@@ -1,6 +1,8 @@
 #ifndef __UTILS_H_INCLUDED__
 #define __UTILS_H_INCLUDED__
 
+#pragma once
+
 #include <filesystem>
 #include <vector>
 #include <string>

@@ -11,6 +11,8 @@
 #include <plog/Initializers/RollingFileInitializer.h>
 #include <seqan3/search/views/minimiser_hash.hpp>
 #include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/utility/views/enforce_random_access.hpp>
+#include <seqan3/utility/range/concept.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
 
@@ -25,6 +27,11 @@ void setup_classify_subcommand(CLI::App& app)
         ->transform(make_absolute)
         ->check(CLI::ExistingFile.description(""))
         ->type_name("FILE");
+
+    classify_subcommand
+            ->add_option("--chunk_size", opt->chunk_size, "Read file is read in chunks of this size, to be processed in parallel within a chunk.")
+            ->type_name("INT")
+            ->capture_default_str();
 
     classify_subcommand
         ->add_option("-t,--threads", opt->threads, "Maximum number of threads to use.")
@@ -53,22 +60,37 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
     PLOG_INFO << "Defined hash_adaptor";
+
     auto agent = index.agent();
     PLOG_INFO << "Defined agent";
 
     PLOG_INFO << "Classifying file " << opt.read_file;
     seqan3::sequence_file_input fin{opt.read_file};
+    using record_type = decltype(fin)::record_type;
+    std::vector<record_type> records{};
 
-    for (auto & record : fin)
+    for (auto && chunk : fin | seqan3::views::chunk(opt.chunk_size))
     {
-        PLOG_INFO << "Processing read " << record.id();
-        auto read_id = split(record.id(), " ")[0];
-        for (auto && value : record.sequence() | hash_adaptor)
+        // You can use a for loop:
+        for (auto & record : chunk)
         {
-            auto & entry = agent.bulk_contains(value);
-            result.update_entry(read_id, entry);
+            records.push_back(std::move(record));
         }
-        result.print_result(read_id);
+#pragma omp parallel for firstprivate(agent, hash_adaptor)
+        for (auto i=0; i<records.size(); ++i){
+
+            auto record = records[i];
+            //PLOG_INFO << "Processing read " << record.id();
+            auto read_id = split(record.id(), " ")[0];
+            for (auto && value : record.sequence() | hash_adaptor) {
+                auto &entry = agent.bulk_contains(value);
+#pragma omp critical
+                result.update_entry(read_id, entry);
+            }
+#pragma omp critical
+            result.print_result(read_id);
+        }
+        records.clear();
     }
     PLOG_INFO << "Read all reads";
     return result;

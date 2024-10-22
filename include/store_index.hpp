@@ -1,3 +1,8 @@
+#ifndef SIFTER_STORE_INDEX_H
+#define SIFTER_STORE_INDEX_H
+
+#pragma once
+
 #include <filesystem>
 #include <fstream>
 #include <cereal/archives/binary.hpp>
@@ -11,3 +16,5 @@ static inline void store_index(std::filesystem::path const & path, Index && inde
     cereal::BinaryOutputArchive oarchive{os};
     oarchive(index);
 }
+
+#endif // SIFTER_STORE_INDEX_MAIN_H
