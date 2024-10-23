@@ -102,6 +102,49 @@ InputFileMap parse_input_file(const std::filesystem::path& input_file){
     return InputFileMap {filepath_to_bin, bin_to_name};
 }
 
+InputSummary estimate_index_size(const InputFileMap& input, const IndexArguments& opt){
+    PLOG_INFO << "Estimate size from files";
+    InputSummary summary;
+
+    std::unordered_map<uint8_t, uint64_t> lengths;
+
+    for (const auto& pair : input.filepath_to_bin) {
+        const auto& fasta_file = pair.first;
+        const auto& bin = pair.second;
+
+        PLOG_INFO << "Checking file " << fasta_file;
+        seqan3::sequence_file_input fin{fasta_file};
+        summary.num_files += 1;
+
+        auto length = 0;
+        for (auto & record : fin)
+        {
+            length += record.sequence().size();
+            summary.records_per_bin[bin]++;
+        }
+        lengths[bin] += length;
+    }
+
+    // estimate max bin size
+    uint64_t max_count = 0;
+    for(auto kv : lengths) {
+        summary.num_bins += 1;
+        summary.hashes_per_bin[kv.first] = static_cast<uint64_t>(round((kv.second * 2)/(opt.window_size + 1)));
+        max_count = std::max(max_count, static_cast<uint64_t>(round(1.1*summary.hashes_per_bin[kv.first])));
+    }
+    opt.bits = max_count;
+
+    std::cout << "num_bins: " << +summary.num_bins << ", num_files: " << summary.num_files << std::endl;
+    for (const auto& item: summary.records_per_bin){
+        std::cout << "Bin " << +item.first << " has " << item.second << " records" << std::endl;
+    }
+    for (const auto& item: summary.hashes_per_bin){
+        std::cout << "Bin " << +item.first << " has " << item.second << " hashes" << std::endl;
+    }
+
+    return summary;
+}
+
 InputSummary summarise_input(const InputFileMap& input, const IndexArguments& opt){
     PLOG_INFO << "Estimate size and summary information from files";
     InputSummary summary;
@@ -225,7 +268,7 @@ int index_main(IndexArguments & opt)
     PLOG_NONE << "none";
 
     auto input = parse_input_file(opt.input_file);
-    auto summary = summarise_input(input, opt);
+    auto summary = estimate_index_size(input, opt);
     auto index = build_index(input, summary, opt);
     store_index(opt.prefix, std::move(index));
 
