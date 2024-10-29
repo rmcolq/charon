@@ -19,7 +19,7 @@ class Index
         uint8_t window_size_{};
         uint8_t kmer_size_{};
         uint8_t num_bins_{};
-        double fpr_{};
+        double max_fpr_{};
         InputSummary summary_{};
         std::unordered_map<uint8_t, std::string> bin_to_name_{};
         seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> ibf_{};
@@ -38,7 +38,7 @@ class Index
             window_size_{arguments.window_size},
             kmer_size_{arguments.kmer_size},
             num_bins_{arguments.bins},
-            fpr_{arguments.fpr},
+            max_fpr_{arguments.max_fpr},
             summary_{summary},
             //bin_to_name_{input.bin_to_name},
             ibf_(ibf)
@@ -59,9 +59,9 @@ class Index
             return num_bins_;
         }
 
-        double fpr() const
+        double max_fpr() const
         {
-            return fpr_;
+            return max_fpr_;
         }
 
         InputSummary summary() const
@@ -105,7 +105,7 @@ class Index
                     archive(window_size_);
                     archive(kmer_size_);
                     archive(num_bins_);
-                    archive(fpr_);
+                    archive(max_fpr_);
                     //archive(summary_);
                     //archive(bin_to_name_);
                     archive(ibf_);
@@ -134,7 +134,7 @@ class Index
                     archive(window_size_);
                     archive(kmer_size_);
                     archive(num_bins_);
-                    archive(fpr_);
+                    archive(max_fpr_);
                     //archive(summary_);
                     //archive(bin_to_name_);
                     archive(ibf_);

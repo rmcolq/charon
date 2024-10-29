@@ -24,7 +24,7 @@ struct IndexArguments {
     uint8_t bins {2};
     mutable uint64_t bits {4096}; // Allow to change bits for each partition
     uint8_t hash {2};
-    double fpr {0.05};
+    double max_fpr {0.05};
 
     // General options
     std::string log_file {"sifter.log"};

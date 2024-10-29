@@ -132,15 +132,16 @@ InputSummary estimate_index_size(const InputFileMap& input, const IndexArguments
         summary.hashes_per_bin[kv.first] = static_cast<uint64_t>(round((kv.second * 2)/(opt.window_size + 1)));
         max_count = std::max(max_count, static_cast<uint64_t>(round(1.1*summary.hashes_per_bin[kv.first])));
     }
-    opt.bits = max_count;
+    opt.bits = std::ceil( ( max_count * std::log( opt.max_fpr ) ) / std::log( 1.0 / std::pow( 2, std::log( 2 ) ) ) );
 
-    std::cout << "num_bins: " << +summary.num_bins << ", num_files: " << summary.num_files << std::endl;
+    PLOG_DEBUG << "num_bins: " << +summary.num_bins << ", num_files: " << summary.num_files;
     for (const auto& item: summary.records_per_bin){
-        std::cout << "Bin " << +item.first << " has " << item.second << " records" << std::endl;
+        PLOG_DEBUG << "Bin " << +item.first << " has " << item.second << " records";
     }
     for (const auto& item: summary.hashes_per_bin){
-        std::cout << "Bin " << +item.first << " has " << item.second << " hashes" << std::endl;
+        PLOG_DEBUG << "Bin " << +item.first << " has " << item.second << " hashes";
     }
+    PLOG_DEBUG << "using: " << opt.bits << " to achieve a max_fpr of " << opt.max_fpr;
 
     return summary;
 }
@@ -209,6 +210,7 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
                                          seqan3::bin_size{opt.bits},
                                          seqan3::hash_function_count{2u}};
 
+    InputSummary index_summary;
 #pragma omp parallel for
     for (const auto pair : input.filepath_to_bin) {
         const auto& fasta_file = pair.first;
@@ -216,16 +218,22 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
 
         PLOG_INFO << "Adding file " << fasta_file;
         seqan3::sequence_file_input fin{fasta_file};
-        summary.num_files += 1;
+        index_summary.num_files += 1;
 
         auto record_count = 0;
-        for (const auto & record : fin)
-        {
-            summary.records_per_bin[bin] += 1;
-            for (auto && value : record.sequence() | hash_adaptor)
-                ibf.emplace(value, seqan3::bin_index{bin});
+        std::unordered_set<uint64_t> hashes;
+        for (const auto & record : fin){
+            index_summary.records_per_bin[bin] += 1;
+            const auto mh = record.sequence() | hash_adaptor | std::views::common;
+            hashes.insert( mh.begin(), mh.end() );
             record_count++;
         }
+
+        for (auto && value : hashes){
+            ibf.emplace(value, seqan3::bin_index{bin});
+            index_summary.hashes_per_bin[bin] += 1;
+        }
+
         PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << +bin << std::endl;
     }
 
