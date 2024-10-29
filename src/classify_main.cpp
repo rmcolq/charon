@@ -12,9 +12,9 @@
 #include <seqan3/search/views/minimiser_hash.hpp>
 #include <seqan3/io/sequence_file/input.hpp>
 #include <seqan3/utility/views/enforce_random_access.hpp>
+#include <seqan3/alphabet/quality/phred_base.hpp>
 #include <seqan3/utility/range/concept.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
-
 
 void setup_classify_subcommand(CLI::App& app)
 {
@@ -65,7 +65,7 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
     PLOG_INFO << "Defined agent";
 
     PLOG_INFO << "Classifying file " << opt.read_file;
-    seqan3::sequence_file_input fin{opt.read_file};
+    seqan3::sequence_file_input<my_traits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
 

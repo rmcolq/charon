@@ -7,6 +7,8 @@
 #include <cstring>
 
 #include "CLI11.hpp"
+#include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/alphabet/quality/phred94.hpp>
 
 #include "result.hpp"
 
@@ -24,6 +26,11 @@ struct ClassifyArguments {
     std::string log_file {"sifter.log"};
     uint8_t threads { 1 };
     uint8_t verbosity { 0 };
+};
+
+struct my_traits : seqan3::sequence_file_input_default_traits_dna
+{
+    using quality_alphabet = seqan3::phred94;
 };
 
 void setup_classify_subcommand(CLI::App& app);
