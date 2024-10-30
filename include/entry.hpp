@@ -13,8 +13,10 @@ class ReadEntry
 {
     private:
         std::string read_id_;
+        std::uint16_t length_;
         uint32_t num_hashes_{0};
         Counts<uint32_t> counts_;
+        std::vector<std::vector<bool>> bits_;
 
     public:
         ReadEntry() = default;
@@ -24,8 +26,9 @@ class ReadEntry
         ReadEntry & operator=(ReadEntry &&) = default;
         ~ReadEntry() = default;
 
-        ReadEntry(const std::string read_id, const uint8_t num_bins):
-            read_id_(read_id)
+        ReadEntry(const std::string read_id, const uint16_t length, const uint8_t num_bins):
+            read_id_(read_id),
+            length_(length)
             {counts_.set_size(num_bins);}
 
         void update_entry(const auto & entry){
@@ -40,6 +43,7 @@ class ReadEntry
             {
                 const auto row = entry[i];
                 PLOG_DEBUG << "row " << i << " " << row;
+                bits_[i].push_back(row);
                 if (row == 0){
                     continue;
                 }
@@ -63,6 +67,12 @@ class ReadEntry
                 for (auto j=0; j<i; j++) {
                     std::cout << +i << "x" << +j << ":" << counts_(i, j) << "\t";
                 }
+            }
+            for (auto i=0; i<bits_.size(); i++){
+                for (auto j=0; j<bits_[i].size(); j++) {
+                    std::cout << +bits_[i][j];
+                }
+                std::cout << "\t";
             }
             std::cout << std::endl;
         };

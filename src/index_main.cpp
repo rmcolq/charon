@@ -206,6 +206,7 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
     PLOG_INFO << "Build index from files";
     const auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
     PLOG_DEBUG << "Defined hash adaptor";
+    PLOG_DEBUG << "Trying to initialize ibf with " << +summary.num_bins << " bins and " << opt.bits << " bits";
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{summary.num_bins},
                                          seqan3::bin_size{opt.bits},
                                          seqan3::hash_function_count{2u}};

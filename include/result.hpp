@@ -28,14 +28,14 @@ class Result
             num_bins_{num_bins}
         {};
 
-        void update_entry(const std::string read_id, const auto & entry){
+        void update_entry(const std::string read_id, const uint16_t length, const auto & entry){
             /*std::cout << read_id << " ";
             for (const auto i : entry){
                 std:: cout << +i;
             }
             std::cout << std::endl;*/
             if (entries.find(read_id) == entries.end()){
-                entries[read_id] = ReadEntry(read_id, num_bins_);
+                entries[read_id] = ReadEntry(read_id, length, num_bins_);
             }
             entries[read_id].update_entry(entry);
         };

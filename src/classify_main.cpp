@@ -85,7 +85,7 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
             for (auto && value : record.sequence() | hash_adaptor) {
                 auto &entry = agent.bulk_contains(value);
 #pragma omp critical
-                result.update_entry(read_id, entry);
+                result.update_entry(read_id, record.sequence().size(), entry);
             }
 #pragma omp critical
             result.print_result(read_id);
