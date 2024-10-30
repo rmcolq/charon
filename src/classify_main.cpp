@@ -111,14 +111,7 @@ int classify_main(ClassifyArguments & opt)
         opt.db += ".idx";
     }
 
-    LOG_INFO << "Hello log!";
-    PLOG_VERBOSE << "verbose";
-    PLOG_DEBUG << "debug";
-    PLOG_INFO << "info";
-    PLOG_WARNING << "warning";
-    PLOG_ERROR << "error";
-    PLOG_FATAL << "fatal";
-    PLOG_NONE << "none";
+    LOG_INFO << "Running sifter classify";
 
     auto index = Index();
     load_index(index, opt.db);

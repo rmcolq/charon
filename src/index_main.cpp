@@ -223,6 +223,7 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
         auto record_count = 0;
         std::unordered_set<uint64_t> hashes;
         for (const auto & record : fin){
+#pragma omp critical
             index_summary.records_per_bin[bin] += 1;
             const auto mh = record.sequence() | hash_adaptor | std::views::common;
             hashes.insert( mh.begin(), mh.end() );
@@ -231,6 +232,7 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
 
         for (auto && value : hashes){
             ibf.emplace(value, seqan3::bin_index{bin});
+#pragma omp critical
             index_summary.hashes_per_bin[bin] += 1;
         }
 
@@ -266,14 +268,7 @@ int index_main(IndexArguments & opt)
         opt.prefix = opt.input_file + ".idx";
     }
 
-    LOG_INFO << "Hello log!";
-    PLOG_VERBOSE << "verbose";
-    PLOG_DEBUG << "debug";
-    PLOG_INFO << "info";
-    PLOG_WARNING << "warning";
-    PLOG_ERROR << "error";
-    PLOG_FATAL << "fatal";
-    PLOG_NONE << "none";
+    LOG_INFO << "Running sifter index!";
 
     auto input = parse_input_file(opt.input_file);
     auto summary = estimate_index_size(input, opt);
