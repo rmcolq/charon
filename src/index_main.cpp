@@ -205,12 +205,13 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
 {
     PLOG_INFO << "Build index from files";
     const auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
-
+    PLOG_DEBUG << "Defined hash adaptor";
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{summary.num_bins},
                                          seqan3::bin_size{opt.bits},
                                          seqan3::hash_function_count{2u}};
-
+    PLOG_DEBUG << "Initialized ibf";
     InputSummary index_summary;
+    PLOG_DEBUG << "Defined index_summary";
 #pragma omp parallel for
     for (const auto pair : input.filepath_to_bin) {
         const auto& fasta_file = pair.first;
@@ -218,6 +219,7 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
 
         PLOG_INFO << "Adding file " << fasta_file;
         seqan3::sequence_file_input fin{fasta_file};
+#pragma omp critical
         index_summary.num_files += 1;
 
         auto record_count = 0;
@@ -229,14 +231,13 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
             hashes.insert( mh.begin(), mh.end() );
             record_count++;
         }
-
+#pragma omp critical
         for (auto && value : hashes){
             ibf.emplace(value, seqan3::bin_index{bin});
-#pragma omp critical
             index_summary.hashes_per_bin[bin] += 1;
         }
 
-        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << +bin << std::endl;
+        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin << std::endl;
     }
 
     return Index(opt, summary, ibf);
