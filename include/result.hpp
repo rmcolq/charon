@@ -35,8 +35,10 @@ class Result
             }
             std::cout << std::endl;*/
             if (entries.find(read_id) == entries.end()){
+                PLOG_DEBUG << "Define entry for " << read_id << " with length " << length;
                 entries[read_id] = ReadEntry(read_id, length, num_bins_);
             }
+            PLOG_DEBUG << "Update entry";
             entries[read_id].update_entry(entry);
         };
 

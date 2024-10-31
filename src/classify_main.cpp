@@ -82,10 +82,11 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
             auto record = records[i];
             //PLOG_INFO << "Processing read " << record.id();
             auto read_id = split(record.id(), " ")[0];
+            auto read_length = record.sequence().size();
             for (auto && value : record.sequence() | hash_adaptor) {
                 auto &entry = agent.bulk_contains(value);
 #pragma omp critical
-                result.update_entry(read_id, record.sequence().size(), entry);
+                result.update_entry(read_id, read_length, entry);
             }
 #pragma omp critical
             result.print_result(read_id);

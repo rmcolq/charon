@@ -13,7 +13,7 @@ class ReadEntry
 {
     private:
         std::string read_id_;
-        std::uint16_t length_;
+        uint16_t length_;
         uint32_t num_hashes_{0};
         Counts<uint32_t> counts_;
         std::vector<std::vector<bool>> bits_;
