@@ -16,7 +16,7 @@ class ReadEntry
         uint16_t length_;
         uint32_t num_hashes_{0};
         Counts<uint32_t> counts_;
-        std::vector<std::vector<bool>> bits_;
+        std::unordered_map<uint8_t, std::vector<bool>> bits_;
 
     public:
         ReadEntry() = default;
@@ -29,7 +29,12 @@ class ReadEntry
         ReadEntry(const std::string read_id, const uint16_t length, const uint8_t num_bins):
             read_id_(read_id),
             length_(length)
-            {counts_.set_size(num_bins);}
+            {
+                counts_.set_size(num_bins);
+                for (auto i=0; i<num_bins; ++i){
+                    bits_[i].reserve(length);
+                }
+            }
 
         void update_entry(const auto & entry){
             /*PLOG_DEBUG << " entry [";
