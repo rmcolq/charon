@@ -273,7 +273,8 @@ int index_main(IndexArguments & opt)
     LOG_INFO << "Running sifter index!";
 
     auto input = parse_input_file(opt.input_file);
-    auto summary = estimate_index_size(input, opt);
+    auto summary = InputSummary(); //estimate_index_size(input, opt);
+    summary.num_bins = input.bin_to_name.size();
     auto index = build_index(input, summary, opt);
     store_index(opt.prefix, std::move(index));
 

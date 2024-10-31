@@ -56,15 +56,14 @@ void setup_classify_subcommand(CLI::App& app)
 Result classify_reads(const Index& index, const ClassifyArguments& opt){
     PLOG_INFO << "Classifying file " << opt.read_file;
     auto result = Result(index.num_bins());
-    PLOG_INFO << "Defined Result";
+    PLOG_DEBUG << "Defined Result";
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
-    PLOG_INFO << "Defined hash_adaptor";
+    PLOG_DEBUG << "Defined hash_adaptor";
 
     auto agent = index.agent();
-    PLOG_INFO << "Defined agent";
+    PLOG_DEBUG << "Defined agent";
 
-    PLOG_INFO << "Classifying file " << opt.read_file;
     seqan3::sequence_file_input<my_traits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};

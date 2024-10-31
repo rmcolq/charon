@@ -22,7 +22,7 @@ struct IndexArguments {
 
     // IBF options
     uint8_t bins {2};
-    mutable uint64_t bits {4096}; // Allow to change bits for each partition
+    mutable uint64_t bits {409600000}; // Allow to change bits for each partition
     uint8_t hash {2};
     double max_fpr {0.05};
 
