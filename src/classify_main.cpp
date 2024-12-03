@@ -1,6 +1,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <iostream>
+#include <algorithm>
 
 #include "classify_main.hpp"
 #include "index.hpp"
@@ -55,8 +56,9 @@ void setup_classify_subcommand(CLI::App& app)
 
 Result classify_reads(const Index& index, const ClassifyArguments& opt){
     PLOG_INFO << "Classifying file " << opt.read_file;
+    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
     auto result = Result(index.num_bins());
-    PLOG_DEBUG << "Defined Result";
+    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
     PLOG_DEBUG << "Defined hash_adaptor";
@@ -82,6 +84,7 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
             //PLOG_INFO << "Processing read " << record.id();
             auto read_id = split(record.id(), " ")[0];
             auto read_length = record.sequence().size();
+            //auto read_quality = std::max(record.base_qualities());
             for (auto && value : record.sequence() | hash_adaptor) {
                 auto &entry = agent.bulk_contains(value);
 #pragma omp critical

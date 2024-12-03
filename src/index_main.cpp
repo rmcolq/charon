@@ -8,6 +8,7 @@
 #include "index.hpp"
 #include "store_index.hpp"
 #include "utils.hpp"
+#include "input_summary.hpp"
 
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
@@ -65,7 +66,7 @@ InputFileMap parse_input_file(const std::filesystem::path& input_file){
     PLOG_INFO << "Parsing input file " << input_file;
     std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
     std::unordered_map<uint8_t, std::string> bin_to_name;
-    std::unordered_map<std::string, uint8_t> name_to_bin;
+    std::unordered_set<std::string> categories;
     uint8_t next_bin = 0;
 
     std::ifstream input_ifstream;
@@ -83,21 +84,17 @@ InputFileMap parse_input_file(const std::filesystem::path& input_file){
             if (parts.size() >= 2) {
                 auto path = parts[0];
                 auto name = make_absolute(parts[1]).string();
-                auto found_bin = name_to_bin.find(name);
-                if (found_bin == name_to_bin.end()){
-                    name_to_bin[name] = next_bin;
-                    bin_to_name[next_bin] = name;
-                    next_bin++;
-                }
-                auto bin = name_to_bin[name];
-                filepath_to_bin.emplace_back(std::make_pair(path, bin));
+                bin_to_name[next_bin] = name;
+                categories.insert(name);
+                filepath_to_bin.emplace_back(std::make_pair(path, next_bin));
+                next_bin++;
             }
         }
     }
     input_ifstream.close();
 
-    PLOG_INFO << "Found " << filepath_to_bin.size() << " files corresponding to " << bin_to_name.size() << " bins";
-    std::cout << "Found " << filepath_to_bin.size() << " files corresponding to " << bin_to_name.size() << " bins" << std::endl;
+    PLOG_INFO << "Found " << filepath_to_bin.size() << " files corresponding to " << categories.size() << " categories";
+    std::cout << "Found " << filepath_to_bin.size() << " files corresponding to " << categories.size() << " categories" << std::endl;
 
     return InputFileMap {filepath_to_bin, bin_to_name};
 }
@@ -241,7 +238,7 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
         PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin << std::endl;
     }
 
-    return Index(opt, summary, ibf);
+    return Index(opt, input, summary, ibf);
 }
 
 

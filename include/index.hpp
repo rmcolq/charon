@@ -7,10 +7,12 @@
 #include <string>
 
 #include <cereal/types/string.hpp>
+#include <cereal/types/unordered_map.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 #include <plog/Log.h>
 
 #include <index_main.hpp>
+#include <input_summary.hpp>
 
 
 class Index
@@ -18,7 +20,6 @@ class Index
     private:
         uint8_t window_size_{};
         uint8_t kmer_size_{};
-        uint8_t num_bins_{};
         double max_fpr_{};
         InputSummary summary_{};
         std::unordered_map<uint8_t, std::string> bin_to_name_{};
@@ -34,13 +35,12 @@ class Index
         Index & operator=(Index &&) = default;
         ~Index() = default;
 
-        Index(const IndexArguments & arguments, const InputSummary & summary, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
+        Index(const IndexArguments & arguments, const InputFileMap & input, const InputSummary & summary, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
             window_size_{arguments.window_size},
             kmer_size_{arguments.kmer_size},
-            num_bins_{arguments.bins},
             max_fpr_{arguments.max_fpr},
             summary_{summary},
-            //bin_to_name_{input.bin_to_name},
+            bin_to_name_{input.bin_to_name},
             ibf_(ibf)
         {}
 
@@ -56,7 +56,7 @@ class Index
 
         uint8_t num_bins() const
         {
-            return num_bins_;
+            return summary_.num_bins;
         }
 
         double max_fpr() const
@@ -104,10 +104,9 @@ class Index
                 {
                     archive(window_size_);
                     archive(kmer_size_);
-                    archive(num_bins_);
                     archive(max_fpr_);
-                    //archive(summary_);
-                    //archive(bin_to_name_);
+                    archive(summary_);
+                    archive(bin_to_name_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START
@@ -133,10 +132,9 @@ class Index
                 {
                     archive(window_size_);
                     archive(kmer_size_);
-                    archive(num_bins_);
                     archive(max_fpr_);
-                    //archive(summary_);
-                    //archive(bin_to_name_);
+                    archive(summary_);
+                    archive(bin_to_name_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START
