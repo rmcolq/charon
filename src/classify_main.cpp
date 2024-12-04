@@ -57,7 +57,7 @@ void setup_classify_subcommand(CLI::App& app)
 Result classify_reads(const Index& index, const ClassifyArguments& opt){
     PLOG_INFO << "Classifying file " << opt.read_file;
     PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
-    auto result = Result(index.num_bins());
+    auto result = Result(index.summary());
     PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});

@@ -13,6 +13,7 @@
 
 #include <index_main.hpp>
 #include <input_summary.hpp>
+#include <input_stats.hpp>
 
 
 class Index
@@ -22,7 +23,7 @@ class Index
         uint8_t kmer_size_{};
         double max_fpr_{};
         InputSummary summary_{};
-        std::unordered_map<uint8_t, std::string> bin_to_name_{};
+        InputStats stats_{};
         seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> ibf_{};
 
     public:
@@ -35,13 +36,13 @@ class Index
         Index & operator=(Index &&) = default;
         ~Index() = default;
 
-        Index(const IndexArguments & arguments, const InputFileMap & input, const InputSummary & summary, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
-            window_size_{arguments.window_size},
-            kmer_size_{arguments.kmer_size},
-            max_fpr_{arguments.max_fpr},
-            summary_{summary},
-            bin_to_name_{input.bin_to_name},
-            ibf_(ibf)
+        Index(const IndexArguments & arguments, const InputSummary & summary, const InputStats & stats, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
+                window_size_{arguments.window_size},
+                kmer_size_{arguments.kmer_size},
+                max_fpr_{arguments.max_fpr},
+                summary_{summary},
+                stats_{stats},
+                ibf_(ibf)
         {}
 
         uint8_t window_size() const
@@ -59,9 +60,19 @@ class Index
             return summary_.num_bins;
         }
 
+        uint8_t num_categories() const
+        {
+            return summary_.num_categories();
+        }
+
         double max_fpr() const
         {
             return max_fpr_;
+        }
+
+        InputStats stats() const
+        {
+            return stats_;
         }
 
         InputSummary summary() const
@@ -69,9 +80,9 @@ class Index
             return summary_;
         }
 
-        std::unordered_map<uint8_t, std::string> bin_to_name() const
+        std::unordered_map<uint8_t, std::string> bin_to_category() const
         {
-            return bin_to_name_;
+            return summary_.bin_to_category;
         }
 
         /*seqan3::interleaved_bloom_filter<> & ibf()
@@ -106,7 +117,7 @@ class Index
                     archive(kmer_size_);
                     archive(max_fpr_);
                     archive(summary_);
-                    archive(bin_to_name_);
+                    archive(stats_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START
@@ -134,7 +145,7 @@ class Index
                     archive(kmer_size_);
                     archive(max_fpr_);
                     archive(summary_);
-                    archive(bin_to_name_);
+                    archive(stats_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START

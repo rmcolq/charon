@@ -61,13 +61,12 @@ void setup_index_subcommand(CLI::App& app)
     index_subcommand->callback([opt]() { index_main(*opt); });
 }
 
-InputFileMap parse_input_file(const std::filesystem::path& input_file){
+InputSummary parse_input_file(const std::filesystem::path& input_file){
     std::cout << "Parsing input file " << std::endl;
     PLOG_INFO << "Parsing input file " << input_file;
-    std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
-    std::unordered_map<uint8_t, std::string> bin_to_name;
-    std::unordered_set<std::string> categories;
+    InputSummary summary;
     uint8_t next_bin = 0;
+    std::unordered_set<std::string> categories;
 
     std::ifstream input_ifstream;
     input_ifstream.open(input_file);
@@ -82,42 +81,45 @@ InputFileMap parse_input_file(const std::filesystem::path& input_file){
         if (!line.empty()) {
             auto parts = split(line, "\t");
             if (parts.size() >= 2) {
-                auto path = parts[0];
-                auto name = make_absolute(parts[1]).string();
-                bin_to_name[next_bin] = name;
+                auto path = make_absolute(parts[0]).string();
+                auto name = parts[1];
+                summary.bin_to_category[next_bin] = name;
                 categories.insert(name);
-                filepath_to_bin.emplace_back(std::make_pair(path, next_bin));
+                summary.filepath_to_bin.emplace_back(std::make_pair(path, next_bin));
                 next_bin++;
             }
         }
     }
     input_ifstream.close();
 
-    PLOG_INFO << "Found " << filepath_to_bin.size() << " files corresponding to " << categories.size() << " categories";
-    std::cout << "Found " << filepath_to_bin.size() << " files corresponding to " << categories.size() << " categories" << std::endl;
+    summary.num_bins = next_bin;
+    summary.categories.insert(summary.categories.end(), categories.begin(), categories.end());
 
-    return InputFileMap {filepath_to_bin, bin_to_name};
+    PLOG_INFO << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories over " << +summary.num_bins << " bins";
+    std::cout << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories over " << +summary.num_bins << " bins" << std::endl;
+
+    return summary;
 }
 
-InputSummary estimate_index_size(const InputFileMap& input, const IndexArguments& opt){
+InputStats estimate_index_size(const InputSummary& summary, const IndexArguments& opt){
     PLOG_INFO << "Estimate size from files";
-    InputSummary summary;
+    InputStats stats;
 
     std::unordered_map<uint8_t, uint64_t> lengths;
 
-    for (const auto& pair : input.filepath_to_bin) {
+    for (const auto& pair : summary.filepath_to_bin) {
         const auto& fasta_file = pair.first;
         const auto& bin = pair.second;
 
         PLOG_INFO << "Checking file " << fasta_file;
         seqan3::sequence_file_input fin{fasta_file};
-        summary.num_files += 1;
+        stats.num_files += 1;
 
         auto length = 0;
         for (auto & record : fin)
         {
             length += record.sequence().size();
-            summary.records_per_bin[bin]++;
+            stats.records_per_bin[bin]++;
         }
         lengths[bin] += length;
     }
@@ -125,32 +127,32 @@ InputSummary estimate_index_size(const InputFileMap& input, const IndexArguments
     // estimate max bin size
     uint64_t max_count = 0;
     for(auto kv : lengths) {
-        summary.num_bins += 1;
-        summary.hashes_per_bin[kv.first] = static_cast<uint64_t>(round((kv.second * 2)/(opt.window_size + 1)));
-        max_count = std::max(max_count, static_cast<uint64_t>(round(1.1*summary.hashes_per_bin[kv.first])));
+        //stats.num_bins += 1;
+        stats.hashes_per_bin[kv.first] = static_cast<uint64_t>(round((kv.second * 2)/(opt.window_size + 1)));
+        max_count = std::max(max_count, static_cast<uint64_t>(round(1.1*stats.hashes_per_bin[kv.first])));
     }
     opt.bits = std::ceil( ( max_count * std::log( opt.max_fpr ) ) / std::log( 1.0 / std::pow( 2, std::log( 2 ) ) ) );
 
-    PLOG_DEBUG << "num_bins: " << +summary.num_bins << ", num_files: " << summary.num_files;
-    for (const auto& item: summary.records_per_bin){
+    //PLOG_DEBUG << "num_bins: " << +stats.num_bins << ", num_files: " << stats.num_files;
+    for (const auto& item: stats.records_per_bin){
         PLOG_DEBUG << "Bin " << +item.first << " has " << item.second << " records";
     }
-    for (const auto& item: summary.hashes_per_bin){
+    for (const auto& item: stats.hashes_per_bin){
         PLOG_DEBUG << "Bin " << +item.first << " has " << item.second << " hashes";
     }
     PLOG_DEBUG << "using: " << opt.bits << " to achieve a max_fpr of " << opt.max_fpr;
 
-    return summary;
+    return stats;
 }
 
-InputSummary summarise_input(const InputFileMap& input, const IndexArguments& opt){
-    PLOG_INFO << "Estimate size and summary information from files";
-    InputSummary summary;
+InputStats summarise_input(const InputSummary& summary, const IndexArguments& opt){
+    PLOG_INFO << "Estimate size and stats information from files";
+    InputStats stats;
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
     std::unordered_map<uint8_t, std::unordered_set<uint64_t>> hashes;
 
-    for (const auto& pair : input.filepath_to_bin) {
+    for (const auto& pair : summary.filepath_to_bin) {
         const auto& fasta_file = pair.first;
         const auto& bin = pair.second;
 
@@ -161,12 +163,12 @@ InputSummary summarise_input(const InputFileMap& input, const IndexArguments& op
 
         PLOG_INFO << "Checking file " << fasta_file;
         seqan3::sequence_file_input fin{fasta_file};
-        //summary.num_files += 1;
+        //stats.num_files += 1;
 
         auto record_count = 0;
         for (auto & record : fin)
         {
-            //summary.records_per_bin[bin] += 1;
+            //stats.records_per_bin[bin] += 1;
             const auto mh = record.sequence() | hash_adaptor | std::views::common;
             hashes[bin].insert( mh.begin(), mh.end() );
             record_count++;
@@ -176,29 +178,29 @@ InputSummary summarise_input(const InputFileMap& input, const IndexArguments& op
     for (const auto& pair : hashes) {
         const auto& bin = pair.first;
         const auto& num_hashes = pair.second.size();
-        summary.hashes_per_bin[bin] = num_hashes;
-        summary.num_bins += 1;
+        stats.hashes_per_bin[bin] = num_hashes;
+        //stats.num_bins += 1;
     }
 
     // estimate max bin size
     uint64_t max_count = 0;
-    for(auto kv : summary.hashes_per_bin) {
+    for(auto kv : stats.hashes_per_bin) {
         max_count = std::max(max_count, static_cast<uint64_t>(round(kv.second*1.1)));
     }
     opt.bits = max_count;
 
-    std::cout << "num_bins: " << +summary.num_bins << ", num_files: " << summary.num_files << std::endl;
-    for (const auto& item: summary.records_per_bin){
+    //std::cout << "num_bins: " << +stats.num_bins << ", num_files: " << stats.num_files << std::endl;
+    for (const auto& item: stats.records_per_bin){
         std::cout << "Bin " << +item.first << " has " << item.second << " records" << std::endl;
     }
-    for (const auto& item: summary.hashes_per_bin){
+    for (const auto& item: stats.hashes_per_bin){
         std::cout << "Bin " << +item.first << " has " << item.second << " hashes" << std::endl;
     }
 
-    return summary;
+    return stats;
 }
 
-Index build_index(const InputFileMap& input, InputSummary& summary, const IndexArguments& opt)
+Index build_index(const InputSummary& summary, InputStats& stats, const IndexArguments& opt)
 {
     PLOG_INFO << "Build index from files";
     const auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
@@ -208,23 +210,23 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
                                          seqan3::bin_size{opt.bits},
                                          seqan3::hash_function_count{2u}};
     PLOG_DEBUG << "Initialized ibf";
-    InputSummary index_summary;
-    PLOG_DEBUG << "Defined index_summary";
+    InputStats input_stats;
+    PLOG_DEBUG << "Defined input_stats";
 #pragma omp parallel for
-    for (const auto pair : input.filepath_to_bin) {
+    for (const auto pair : summary.filepath_to_bin) {
         const auto& fasta_file = pair.first;
         const auto& bin = pair.second;
 
         PLOG_INFO << "Adding file " << fasta_file;
         seqan3::sequence_file_input fin{fasta_file};
 #pragma omp critical
-        index_summary.num_files += 1;
+        input_stats.num_files += 1;
 
         auto record_count = 0;
         std::unordered_set<uint64_t> hashes;
         for (const auto & record : fin){
 #pragma omp critical
-            index_summary.records_per_bin[bin] += 1;
+            input_stats.records_per_bin[bin] += 1;
             const auto mh = record.sequence() | hash_adaptor | std::views::common;
             hashes.insert( mh.begin(), mh.end() );
             record_count++;
@@ -232,13 +234,13 @@ Index build_index(const InputFileMap& input, InputSummary& summary, const IndexA
 #pragma omp critical
         for (auto && value : hashes){
             ibf.emplace(value, seqan3::bin_index{bin});
-            index_summary.hashes_per_bin[bin] += 1;
+            input_stats.hashes_per_bin[bin] += 1;
         }
 
         PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin << std::endl;
     }
 
-    return Index(opt, input, summary, ibf);
+    return Index(opt, summary, stats, ibf);
 }
 
 
@@ -269,10 +271,9 @@ int index_main(IndexArguments & opt)
 
     LOG_INFO << "Running sifter index!";
 
-    auto input = parse_input_file(opt.input_file);
-    auto summary = InputSummary(); //estimate_index_size(input, opt);
-    summary.num_bins = input.bin_to_name.size();
-    auto index = build_index(input, summary, opt);
+    auto summary = parse_input_file(opt.input_file);
+    auto stats = InputStats(); //estimate_index_size(input, opt);
+    auto index = build_index(summary, stats, opt);
     store_index(opt.prefix, std::move(index));
 
     return 0;

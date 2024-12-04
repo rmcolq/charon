@@ -8,14 +8,17 @@
 
 #include <cereal/types/string.hpp>
 #include <cereal/types/unordered_map.hpp>
+#include <cereal/types/vector.hpp>
+#include <cereal/types/utility.hpp>
 #include <plog/Log.h>
 
 struct InputSummary
 {
-        uint8_t num_bins{0};
-        uint32_t num_files{0};
-        std::unordered_map<uint8_t, uint64_t> records_per_bin{};
-        std::unordered_map<uint8_t, uint64_t> hashes_per_bin{};
+    uint8_t num_bins{0};
+    std::vector<std::string> categories;
+    std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
+    std::unordered_map<uint8_t, std::string> bin_to_category;
+
     public:
         InputSummary() = default;
         InputSummary(InputSummary const &) = default;
@@ -24,20 +27,25 @@ struct InputSummary
         InputSummary & operator=(InputSummary &&) = default;
         ~InputSummary() = default;
 
+        uint8_t num_categories() const
+        {
+            return categories.size();
+        }
+
     template <seqan3::cereal_archive archive_t>
     void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t & archive)
     {
         try
         {
             archive(num_bins);
-            archive(num_files);
-            archive(records_per_bin);
-            archive(hashes_per_bin);
+            archive(categories);
+            archive(filepath_to_bin);
+            archive(bin_to_category);
         }
             // GCOVR_EXCL_START
         catch (std::exception const & e)
         {
-            PLOG_ERROR << "Cannot read index: " + std::string{e.what()};
+            PLOG_ERROR << "Cannot read input_summary: " + std::string{e.what()};
             exit(1);
         }
 
@@ -49,14 +57,14 @@ struct InputSummary
         try
         {
             archive(num_bins);
-            archive(num_files);
-            archive(records_per_bin);
-            archive(hashes_per_bin);
+            archive(categories);
+            archive(filepath_to_bin);
+            archive(bin_to_category);
         }
             // GCOVR_EXCL_START
         catch (std::exception const & e)
         {
-            PLOG_ERROR << "Cannot read index: " + std::string{e.what()};
+            PLOG_ERROR << "Cannot read input_summary: " + std::string{e.what()};
             exit(1);
         }
     }

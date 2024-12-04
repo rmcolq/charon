@@ -9,6 +9,7 @@
 #include "CLI11.hpp"
 
 class Index;
+class InputStats;
 class InputSummary;
 
 /// Collection of all options of index subcommand.
@@ -33,20 +34,15 @@ struct IndexArguments {
     uint8_t verbosity { 0 };
 };
 
-struct InputFileMap {
-    std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
-    std::unordered_map<uint8_t, std::string> bin_to_name;
-};
-
 void setup_index_subcommand(CLI::App& app);
 
-InputFileMap parse_input_file(const std::filesystem::path& input_file);
+InputSummary parse_input_file(const std::filesystem::path& input_file);
 
-InputSummary estimate_index_size(const InputFileMap& input, const IndexArguments& opt);
+InputStats estimate_index_size(const InputSummary& summary, const IndexArguments& opt);
 
-InputSummary summarise_input(const InputFileMap& input, const IndexArguments& opt);
+InputStats summarise_input(const InputSummary& summary, const IndexArguments& opt);
 
-Index build_index(const InputFileMap& input, InputSummary& summary, const IndexArguments& opt);
+Index build_index(const InputSummary& summary, InputStats& stats, const IndexArguments& opt);
 
 int index_main(IndexArguments & opt);
 
