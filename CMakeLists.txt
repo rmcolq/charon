@@ -48,9 +48,21 @@ add_executable(${PROJECT_NAME} ${SRC_FILES}
 )
 
 target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog OpenMP::OpenMP_CXX)
+
+include_directories(
+        ${PROJECT_SOURCE_DIR}/lib/include
+)
+file(GLOB_RECURSE TEST_SRC_FILES
+        ${PROJECT_SOURCE_DIR}/scratch/my_app.cpp
+)
+add_executable(test_sifter ${TEST_SRC_FILES}
+        scratch/my_app.cpp
+)
+target_link_libraries(test_sifter seqan3::seqan3)
+
 #target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog)
 
 # enable_testing()
 # add_subdirectory(test)
 
-install(TARGETS ${PROJECT_NAME} RUNTIME DESTINATION bin)
+install(TARGETS ${PROJECT_NAME} test_sifter RUNTIME DESTINATION bin)
