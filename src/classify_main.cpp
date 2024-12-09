@@ -84,6 +84,10 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
             //PLOG_INFO << "Processing read " << record.id();
             auto read_id = split(record.id(), " ")[0];
             auto read_length = record.sequence().size();
+            if (read_length > std::numeric_limits<uint16_t>::max()){
+                PLOG_INFO << "Ignoring read " << record.id() << " as too long!";
+                continue;
+            }
             //auto read_quality = std::max(record.base_qualities());
             for (auto && value : record.sequence() | hash_adaptor) {
                 auto &entry = agent.bulk_contains(value);
