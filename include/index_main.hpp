@@ -24,8 +24,8 @@ struct IndexArguments {
 
     // IBF options
     uint8_t bins {2};
-    mutable uint64_t bits {409600000}; // Allow to change bits for each partition
-    uint8_t hash {2};
+    mutable uint64_t bits {std::numeric_limits<uint32_t>::max()}; // Allow to change bits for each partition
+    uint8_t hash {3};
     double max_fpr {0.05};
 
     // General options
