@@ -5,6 +5,13 @@ set(PROJECT_NAME_STR sifter)
 cmake_minimum_required( VERSION 3.9 FATAL_ERROR )
 project( ${PROJECT_NAME_STR} VERSION 0.0.1 LANGUAGES CXX )
 
+# Use C++20
+set(CMAKE_CXX_STANDARD 20)
+# Require (at least) it
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+# Don't use e.g. GNU extension (like -std=gnu++11) for portability
+set(CMAKE_CXX_EXTENSIONS OFF)
+
 # -----------------------------------------------------------------------------
 # dependencies and 3rd party libraries
 # -----------------------------------------------------------------------------
