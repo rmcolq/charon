@@ -7,6 +7,7 @@
 #include <cstring>
 
 #include "CLI11.hpp"
+#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
 class Index;
 class InputStats;
@@ -32,6 +33,7 @@ struct IndexArguments {
     std::string log_file {"sifter.log"};
     uint8_t threads { 1 };
     uint8_t verbosity { 0 };
+    bool optimize { false };
 };
 
 void setup_index_subcommand(CLI::App& app);
@@ -43,6 +45,10 @@ InputStats estimate_index_size(const InputSummary& summary, const IndexArguments
 InputStats summarise_input(const InputSummary& summary, const IndexArguments& opt);
 
 Index build_index(const InputSummary& summary, InputStats& stats, const IndexArguments& opt);
+
+Index build_index(const InputSummary& summary, InputStats& stats, const IndexArguments& opt);
+
+Index optimize_ibf(const IndexArguments& arguments, const InputSummary& summary, const InputStats& stats, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf);
 
 int index_main(IndexArguments & opt);
 

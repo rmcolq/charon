@@ -57,6 +57,9 @@ void setup_index_subcommand(CLI::App& app)
     index_subcommand->add_flag(
         "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
 
+    index_subcommand->add_flag(
+            "--optimize", opt->optimize, "Compress the number of bins for improved classification run time");
+
     // Set the function that will be called when this subcommand is issued.
     index_subcommand->callback([opt]() { index_main(*opt); });
 }
@@ -240,9 +243,85 @@ Index build_index(const InputSummary& summary, InputStats& stats, const IndexArg
         PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin << std::endl;
     }
 
-    return Index(opt, summary, stats, ibf);
+    if (opt.optimize){
+        return optimize_ibf(opt, summary, stats, ibf);
+    } else {
+        return Index(opt, summary, stats, ibf);
+    }
 }
 
+Index optimize_ibf(const IndexArguments& opt, const InputSummary& summary, const InputStats& stats, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf)
+{
+    PLOG_INFO << "Optimize index bin layout";
+
+    InputSummary new_summary;
+    InputStats new_stats;
+    new_stats.num_files = stats.num_files;
+
+    auto sorted_pairs = stats.bins_by_size();
+    auto max_num_hashes = sorted_pairs.back().second;
+
+    uint8_t next_bin = 0;
+    std::unordered_map<std::string, uint8_t> last_bin;
+    std::unordered_map<uint8_t, uint8_t> bin_to_bucket_map;
+
+    // update stats
+    PLOG_INFO << "Reassign bins";
+    for (const auto & pair : sorted_pairs){
+        const auto& bin = pair.first;
+        const auto& category = summary.bin_to_category.at(bin);
+        const auto& num_hashes = pair.second;
+
+        auto assigned_bucket = next_bin;
+        if (last_bin.find(category) != last_bin.end()){
+            const auto& last_bin_in_category = last_bin[category];
+            const auto& num_hashes_in_last_bin = new_stats.hashes_per_bin[last_bin_in_category];
+            if (num_hashes_in_last_bin + num_hashes < max_num_hashes){
+                assigned_bucket = last_bin_in_category;
+            } else {
+                next_bin++;
+            }
+        } else {
+            next_bin++;
+        }
+        last_bin[category] = assigned_bucket;
+        bin_to_bucket_map[bin] = assigned_bucket;
+        PLOG_INFO << "Bin " << +bin << " assigned to bucket " << assigned_bucket;
+        new_stats.hashes_per_bin[assigned_bucket] += num_hashes;
+        new_stats.records_per_bin[assigned_bucket] += stats.records_per_bin.at(bin);
+    }
+
+    // update summary
+    PLOG_INFO << "Update summary";
+    new_summary.num_bins = next_bin;
+    new_summary.categories = summary.categories;
+    for (const auto & pair : summary.filepath_to_bin){
+        const auto & filepath = pair.first;
+        const auto & bin = pair.second;
+        const auto & bucket = bin_to_bucket_map[bin];
+        new_summary.filepath_to_bin.emplace_back(std::make_pair(filepath, bucket));
+        new_summary.bin_to_category[bucket] = summary.bin_to_category.at(bin);
+    }
+
+    // update ibf
+    PLOG_INFO << "Update IBF";
+    seqan3::interleaved_bloom_filter new_ibf{seqan3::bin_count{summary.num_bins},
+                                         seqan3::bin_size{opt.bits},
+                                         seqan3::hash_function_count{2u}};
+    auto agent = ibf.membership_agent();
+
+    for (auto bit=0; bit<opt.bits; bit++){
+        auto & result = agent.bulk_contains(bit);
+        for (auto bin=0; bin<next_bin; bin++){
+            if (result[bin] > 0){
+                const auto & bucket = bin_to_bucket_map[bin];
+                new_ibf.emplace(bit, seqan3::bin_index{bucket});
+            }
+        }
+    }
+    return Index(opt, new_summary, new_stats, new_ibf);
+
+}
 
 int index_main(IndexArguments & opt)
 {
