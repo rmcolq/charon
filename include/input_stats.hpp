@@ -11,11 +11,6 @@
 #include <cereal/types/unordered_map.hpp>
 #include <plog/Log.h>
 
-bool pair_cmp(std::pair<uint8_t, uint64_t>& a,
-              std::pair<uint8_t, uint64_t>& b)
-{
-    return a.second < b.second;
-}
 
 struct InputStats
 {
@@ -31,6 +26,11 @@ struct InputStats
         InputStats & operator=(InputStats const &) = default;
         InputStats & operator=(InputStats &&) = default;
         ~InputStats() = default;
+
+        static bool pair_cmp(const std::pair<uint8_t, uint64_t>& a, const std::pair<uint8_t, uint64_t>& b)
+        {
+            return a.second < b.second;
+        }
 
         std::vector<std::pair<uint8_t, uint64_t> > bins_by_size() const
         {
