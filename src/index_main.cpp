@@ -3,6 +3,7 @@
 #include <iostream>
 #include <fstream>
 #include <string>
+#include <algorithm>
 
 #include "index_main.hpp"
 #include "index.hpp"
@@ -22,7 +23,7 @@ void setup_index_subcommand(CLI::App& app)
 {
     auto opt = std::make_shared<IndexArguments>();
     auto* index_subcommand = app.add_subcommand(
-        "index", "Build an index (HIBF) for a number of references split into a small number of bins.");
+        "index", "Build an index (IBF) for a number of references split into a small number of bins.");
 
     index_subcommand->add_option("<input>", opt->input_file, "Tab separated file with columns for filename and category")
         ->required()
@@ -62,6 +63,18 @@ void setup_index_subcommand(CLI::App& app)
 
     // Set the function that will be called when this subcommand is issued.
     index_subcommand->callback([opt]() { index_main(*opt); });
+}
+
+inline constexpr size_t bin_size_in_bits(const IndexArguments & opt, const uint64_t & num_elements)
+{
+    assert(opt.num_hash > 0);
+    assert(opt.max_fpr > 0.0);
+    assert(opt.max_fpr < 1.0);
+
+    double const numerator{-static_cast<double>(num_elements * opt.num_hash)};
+    double const denominator{std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash))};
+    double const result{std::ceil(numerator / denominator)};
+    return result;
 }
 
 InputSummary parse_input_file(const std::filesystem::path& input_file){
@@ -211,7 +224,7 @@ Index build_index(const InputSummary& summary, InputStats& stats, const IndexArg
     PLOG_DEBUG << "Trying to initialize ibf with " << +summary.num_bins << " bins and " << opt.bits << " bits";
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{summary.num_bins},
                                          seqan3::bin_size{opt.bits},
-                                         seqan3::hash_function_count{2u}};
+                                         seqan3::hash_function_count{opt.num_hash}};
     PLOG_DEBUG << "Initialized ibf";
     InputStats input_stats;
     PLOG_DEBUG << "Defined input_stats";
@@ -244,7 +257,7 @@ Index build_index(const InputSummary& summary, InputStats& stats, const IndexArg
     }
 
     if (opt.optimize){
-        return optimize_ibf(opt, summary, stats, ibf);
+        return optimize_ibf(opt, summary, input_stats, ibf);
     } else {
         return Index(opt, summary, stats, ibf);
     }
@@ -253,9 +266,12 @@ Index build_index(const InputSummary& summary, InputStats& stats, const IndexArg
 Index optimize_ibf(const IndexArguments& opt, const InputSummary& summary, const InputStats& stats, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf)
 {
     PLOG_INFO << "Optimize index bin layout";
+    if (stats.hashes_per_bin.size() == 0) {
+        return Index(opt, summary, stats, ibf);
+    }
 
-    InputSummary new_summary;
-    InputStats new_stats;
+    auto new_summary = InputSummary();
+    auto new_stats = InputStats();
     new_stats.num_files = stats.num_files;
 
     auto sorted_pairs = stats.bins_by_size();
@@ -286,7 +302,7 @@ Index optimize_ibf(const IndexArguments& opt, const InputSummary& summary, const
         }
         last_bin[category] = assigned_bucket;
         bin_to_bucket_map[bin] = assigned_bucket;
-        PLOG_INFO << "Bin " << +bin << " assigned to bucket " << assigned_bucket;
+        PLOG_INFO << "Bin " << +bin << " assigned to bucket " << +assigned_bucket;
         new_stats.hashes_per_bin[assigned_bucket] += num_hashes;
         new_stats.records_per_bin[assigned_bucket] += stats.records_per_bin.at(bin);
     }
@@ -304,22 +320,26 @@ Index optimize_ibf(const IndexArguments& opt, const InputSummary& summary, const
     }
 
     // update ibf
-    PLOG_INFO << "Update IBF";
-    seqan3::interleaved_bloom_filter new_ibf{seqan3::bin_count{summary.num_bins},
-                                         seqan3::bin_size{opt.bits},
-                                         seqan3::hash_function_count{2u}};
+    PLOG_INFO << "Create new IBF with " << +new_summary.num_bins << " bins and up to " << opt.bits << " bits";
+    const auto num_bits = std::min(bin_size_in_bits(opt, max_num_hashes),opt.bits);
+    PLOG_DEBUG << "Trying to initialize ibf with " << +new_summary.num_bins << " bins and " << num_bits << " bits";
+    seqan3::interleaved_bloom_filter new_ibf{seqan3::bin_count{new_summary.num_bins},
+                                         seqan3::bin_size{num_bits},
+                                         seqan3::hash_function_count{opt.num_hash}};
     auto agent = ibf.membership_agent();
-
     for (auto bit=0; bit<opt.bits; bit++){
         auto & result = agent.bulk_contains(bit);
-        for (auto bin=0; bin<next_bin; bin++){
+#pragma omp parallel for
+        for (auto bin=0; bin<summary.num_bins; bin++){
             if (result[bin] > 0){
                 const auto & bucket = bin_to_bucket_map[bin];
+#pragma omp critical
                 new_ibf.emplace(bit, seqan3::bin_index{bucket});
             }
         }
     }
-    return Index(opt, new_summary, new_stats, new_ibf);
+    PLOG_INFO << "Filled in IBF";
+    return Index(opt, summary, stats, ibf);
 
 }
 

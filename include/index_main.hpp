@@ -25,8 +25,8 @@ struct IndexArguments {
 
     // IBF options
     uint8_t bins {2};
-    mutable uint64_t bits {std::numeric_limits<uint32_t>::max()}; // Allow to change bits for each partition
-    uint8_t hash {3};
+    mutable size_t bits {std::numeric_limits<uint32_t>::max()/2}; // Allow to change bits for each partition
+    uint8_t num_hash {3};
     double max_fpr {0.05};
 
     // General options
@@ -37,6 +37,8 @@ struct IndexArguments {
 };
 
 void setup_index_subcommand(CLI::App& app);
+
+inline constexpr size_t bin_size_in_bits(const IndexArguments & opt, const uint64_t & num_elements);
 
 InputSummary parse_input_file(const std::filesystem::path& input_file);
 

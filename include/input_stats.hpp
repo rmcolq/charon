@@ -27,20 +27,15 @@ struct InputStats
         InputStats & operator=(InputStats &&) = default;
         ~InputStats() = default;
 
-        static bool pair_cmp(const std::pair<uint8_t, uint64_t>& a, const std::pair<uint8_t, uint64_t>& b)
-        {
-            return a.second < b.second;
-        }
-
         std::vector<std::pair<uint8_t, uint64_t> > bins_by_size() const
         {
             std::vector<std::pair<uint8_t, uint64_t> > sorted_pairs;
-
             for (auto& it : hashes_per_bin) {
                 sorted_pairs.push_back(it);
             }
-
-            std::sort(sorted_pairs.begin(), sorted_pairs.end(), pair_cmp);
+            std::sort(sorted_pairs.begin(), sorted_pairs.end(), [](auto &left, auto &right) {
+                return left.second < right.second;
+            });
             return sorted_pairs;
         }
 
