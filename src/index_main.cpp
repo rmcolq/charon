@@ -116,8 +116,8 @@ InputSummary parse_input_file(const std::filesystem::path& input_file){
     summary.num_bins = next_bin;
     summary.categories.insert(summary.categories.end(), categories.begin(), categories.end());
 
-    PLOG_INFO << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories over " << +summary.num_bins << " bins";
-    std::cout << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories over " << +summary.num_bins << " bins" << std::endl;
+    PLOG_INFO << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories";
+    std::cout << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories";
 
     return summary;
 }
@@ -263,7 +263,6 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
 
 std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArguments& opt, InputSummary& summary, InputStats& stats)
 {
-    PLOG_INFO << "Optimize index bin layout";
     std::unordered_map<uint8_t, uint8_t> bin_to_bucket_map;
     std::unordered_map<uint8_t, std::vector<uint8_t>> bucket_to_bins_map;
 
@@ -276,6 +275,7 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
         return bucket_to_bins_map;
     }
 
+    PLOG_INFO << "Optimize index bin layout";
     auto new_summary = InputSummary();
     auto new_stats = InputStats();
     new_stats.num_files = stats.num_files;
