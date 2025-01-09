@@ -42,15 +42,16 @@ inline constexpr size_t bin_size_in_bits(const IndexArguments & opt, const uint6
 
 InputSummary parse_input_file(const std::filesystem::path& input_file);
 
-InputStats estimate_index_size(const InputSummary& summary, const IndexArguments& opt);
+//InputStats estimate_index_size(const InputSummary& summary, const IndexArguments& opt);
 
-InputStats summarise_input(const InputSummary& summary, const IndexArguments& opt);
+//InputStats summarise_input(const InputSummary& summary, const IndexArguments& opt);
 
-Index build_index(const InputSummary& summary, InputStats& stats, const IndexArguments& opt);
+InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary& summary);
 
-Index build_index(const InputSummary& summary, InputStats& stats, const IndexArguments& opt);
+std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArguments& arguments, const InputSummary& summary, const InputStats& stats);
 
-Index optimize_ibf(const IndexArguments& arguments, const InputSummary& summary, const InputStats& stats, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf);
+Index build_index(const IndexArguments& opt, const InputSummary& summary, InputStats& stats);
+
 
 int index_main(IndexArguments & opt);
 

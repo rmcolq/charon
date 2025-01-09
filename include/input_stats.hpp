@@ -39,6 +39,12 @@ struct InputStats
             return sorted_pairs;
         }
 
+        uint64_t max_num_hashes()
+        {
+            auto sorted_pairs = bins_by_size();
+            return sorted_pairs.back().second;
+        }
+
     template <seqan3::cereal_archive archive_t>
     void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t & archive)
     {
