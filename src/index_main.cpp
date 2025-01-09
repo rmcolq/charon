@@ -49,17 +49,22 @@ void setup_index_subcommand(CLI::App& app)
     index_subcommand->add_option("-p,--prefix", opt->prefix, "Prefix for the output index.")
         ->type_name("FILE")
         ->check(CLI::NonexistentPath.description(""))
-        ->default_str("<input>");
+        ->default_str("<prefix>");
+
+    index_subcommand->add_option("--temp", opt->tmp_dir, "Temporary directory for index construction files.")
+            ->type_name("DIR")
+            ->default_str("<dir>");
 
     index_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
             ->type_name("FILE");
 
     index_subcommand->add_flag(
-        "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
+            "--optimize", opt->optimize, "Compress the number of bins for improved classification run time");
 
     index_subcommand->add_flag(
-            "--optimize", opt->optimize, "Compress the number of bins for improved classification run time");
+        "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
+
 
     // Set the function that will be called when this subcommand is issued.
     index_subcommand->callback([opt]() { index_main(*opt); });
@@ -248,9 +253,8 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
             record_count++;
         }
 #pragma omp critical
-        store_hashes( std::to_string(bin), hashes, opt.prefix );
+        store_hashes( std::to_string(bin), hashes, opt.tmp_dir );
         stats.hashes_per_bin[bin] += hashes.size();
-
         PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin << std::endl;
     }
 
@@ -339,7 +343,7 @@ Index build_index(const IndexArguments& opt, const InputSummary& summary, InputS
     for ( auto bucket=0; bucket<summary.num_bins; ++bucket ) {
         const auto & bins = bucket_to_bins_map.at(bucket);
         for (auto const & bin : bins){
-            const auto& hashes = load_hashes( std::to_string(bin), opt.prefix );
+            const auto& hashes = load_hashes( std::to_string(bin), opt.tmp_dir );
 #pragma omp critical
             for ( auto && value : hashes )
             {
@@ -347,7 +351,9 @@ Index build_index(const IndexArguments& opt, const InputSummary& summary, InputS
             }
             PLOG_INFO << "Added " << hashes.size() << " hashes to bin " << +bucket << std::endl;
         }
+        delete_hashes( bins, opt.tmp_dir );
     }
+
 
     return Index(opt, summary, stats, ibf);
 }
@@ -376,6 +382,10 @@ int index_main(IndexArguments & opt)
     } else {
         opt.prefix = opt.input_file + ".idx";
     }
+    if (opt.tmp_dir == "") {
+        opt.tmp_dir = opt.input_file + ".tmp_idx";
+    }
+    std::filesystem::create_directory(opt.tmp_dir);
 
     LOG_INFO << "Running sifter index!";
 

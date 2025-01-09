@@ -22,6 +22,6 @@ void store_hashes( const std::string target,
                    const std::string tmp_output_folder );
 std::vector< uint64_t > load_hashes( const std::string target,
                                      const std::string tmp_output_folder );
-void delete_hashes( const auto& targets, const std::string tmp_output_folder );
+void delete_hashes( const std::vector<uint8_t>& targets, const std::string tmp_output_folder );
 
 #endif

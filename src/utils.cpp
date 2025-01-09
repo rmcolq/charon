@@ -33,7 +33,7 @@ void store_hashes( const std::string target,
          * store hashes from set to disk in the specified folder (or current folder ".")
          */
         std::filesystem::path outf{ tmp_output_folder };
-        outf += target + ".min";
+        outf += "/" + target + ".min";
         std::ofstream outfile{ outf, std::ios::binary | std::ios::app };
         for ( auto&& h : hashes )
         {
@@ -52,23 +52,25 @@ void store_hashes( const std::string target,
         uint64_t                hash;
         std::vector< uint64_t > hashes;
         std::filesystem::path file{ tmp_output_folder };
-        file += target + ".min";
+        file += "/" + target + ".min";
         std::ifstream           infile{ file, std::ios::binary };
         while ( infile.read( reinterpret_cast< char* >( &hash ), sizeof( hash ) ) )
             hashes.push_back( hash );
         return hashes;
     }
 
-void delete_hashes( const auto& targets, const std::string tmp_output_folder )
+void delete_hashes( const std::vector<uint8_t>& targets, const std::string tmp_output_folder )
 {
     /*
      * delete hashes from disk
      */
-    for ( auto const& target: targets )
+    for ( const auto & target: targets )
     {
         std::filesystem::path outf{ tmp_output_folder };
-        outf += target + ".min";
+        outf += "/" + std::to_string(target) + ".min";
         if ( std::filesystem::exists( outf ) )
             std::filesystem::remove( outf );
     }
+    if ( std::filesystem::is_empty( tmp_output_folder ) )
+        std::filesystem::remove(tmp_output_folder);
 }
