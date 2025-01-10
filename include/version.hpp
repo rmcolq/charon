@@ -3,7 +3,7 @@
 
 #pragma once
 
-#define SIFTER_VERSION                                                                \
+#define CHARON_VERSION                                                                \
     "@PROJECT_VERSION@"                                                                \
     "@ADDITIONAL_VERSION_LABELS@"
 

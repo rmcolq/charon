@@ -118,7 +118,7 @@ int classify_main(ClassifyArguments & opt)
         opt.db += ".idx";
     }
 
-    LOG_INFO << "Running sifter classify";
+    LOG_INFO << "Running charon classify";
 
     auto index = Index();
     load_index(index, opt.db);

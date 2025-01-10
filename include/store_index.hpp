@@ -1,5 +1,5 @@
-#ifndef SIFTER_STORE_INDEX_H
-#define SIFTER_STORE_INDEX_H
+#ifndef CHARON_STORE_INDEX_H
+#define CHARON_STORE_INDEX_H
 
 #pragma once
 
@@ -17,4 +17,4 @@ static inline void store_index(std::filesystem::path const & path, Index && inde
     oarchive(index);
 }
 
-#endif // SIFTER_STORE_INDEX_MAIN_H
+#endif // CHARON_STORE_INDEX_MAIN_H

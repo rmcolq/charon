@@ -49,10 +49,10 @@ public:
 
 int main(int argc, char* argv[])
 {
-    CLI::App app { "Sifter: Categorize reads into a small number of classes." };
+    CLI::App app { "Charon: Categorize reads into a small number of classes." };
     app.formatter(std::make_shared<MyFormatter>());
     app.add_flag_callback("-V,--version", []() {
-        std::cout << "sifter version " << SIFTER_VERSION << std::endl;
+        std::cout << "charon version " << CHARON_VERSION << std::endl;
         throw(CLI::Success {});
     });
     setup_index_subcommand(app);

@@ -1,5 +1,5 @@
-#ifndef SIFTER_INDEX_H
-#define SIFTER_INDEX_H
+#ifndef CHARON_INDEX_H
+#define CHARON_INDEX_H
 
 #pragma once
 
@@ -158,4 +158,4 @@ class Index
         //!\endcond
     };
 
-#endif // SIFTER_INDEX_H
+#endif // CHARON_INDEX_H
