@@ -237,6 +237,8 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
     for (const auto pair : summary.filepath_to_bin) {
         const auto& fasta_file = pair.first;
         const auto& bin = pair.second;
+        stats.records_per_bin[bin] += 0;
+
 
         PLOG_INFO << "Adding file " << fasta_file;
         seqan3::sequence_file_input fin{fasta_file};
@@ -290,6 +292,8 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
     PLOG_INFO << "Reassign bins";
     for (const auto & pair : sorted_pairs){
         const auto& bin = pair.first;
+        PLOG_DEBUG << "Reassign bin " << +bin;
+        assert( summary.bin_to_category.find(bin) != summary.bin_to_category.end() );
         const auto& category = summary.bin_to_category.at(bin);
         const auto& num_hashes = pair.second;
 
@@ -310,6 +314,7 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
         bucket_to_bins_map[assigned_bucket].push_back(bin);
         PLOG_INFO << "Bin " << +bin << " assigned to bucket " << +assigned_bucket;
         new_stats.hashes_per_bin[assigned_bucket] += num_hashes;
+        assert( stats.records_per_bin.find(bin) != stats.records_per_bin.end() );
         new_stats.records_per_bin[assigned_bucket] += stats.records_per_bin.at(bin);
     }
     stats = new_stats;
@@ -321,8 +326,10 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
     for (const auto & pair : summary.filepath_to_bin){
         const auto & filepath = pair.first;
         const auto & bin = pair.second;
+        PLOG_DEBUG << "Update summary for bin " << +bin;  
         const auto & bucket = bin_to_bucket_map[bin];
         new_summary.filepath_to_bin.emplace_back(std::make_pair(filepath, bucket));
+        assert( summary.bin_to_category.find(bin) != summary.bin_to_category.end() );
         new_summary.bin_to_category[bucket] = summary.bin_to_category.at(bin);
     }
     summary = new_summary;
