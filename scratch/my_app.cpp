@@ -34,6 +34,8 @@ int main()
             ibf.emplace(value, seqan3::bin_index{bin});
         }
         seqan3::debug_stream << "Add ID:  " << record.id() << " to bin " << +bin << " with " << +hashes[bin].size() << " hashes\n";
+        if (bin == 255)
+            break
         bin++;
     }
 
