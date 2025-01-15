@@ -1,5 +1,5 @@
-#ifndef SIFTER_CLASSIFY_MAIN_H
-#define SIFTER_CLASSIFY_MAIN_H
+#ifndef CHARON_CLASSIFY_MAIN_H
+#define CHARON_CLASSIFY_MAIN_H
 
 #pragma once
 
@@ -23,7 +23,7 @@ struct ClassifyArguments {
     uint8_t chunk_size { 100 };
 
     // General options
-    std::string log_file {"sifter.log"};
+    std::string log_file {"charon.log"};
     uint8_t threads { 1 };
     uint8_t verbosity { 0 };
 };
@@ -40,4 +40,4 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt);
 int classify_main(ClassifyArguments & opt);
 
 
-#endif // SIFTER_CLASSIFY_MAIN_H
+#endif // CHARON_CLASSIFY_MAIN_H

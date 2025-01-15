@@ -1,5 +1,5 @@
-#ifndef SIFTER_ENTRY_H
-#define SIFTER_ENTRY_H
+#ifndef CHARON_ENTRY_H
+#define CHARON_ENTRY_H
 
 #pragma once
 
@@ -135,4 +135,4 @@ class ReadEntry
         };
     };
 
-#endif // SIFTER_ENTRY_H
+#endif // CHARON_ENTRY_H

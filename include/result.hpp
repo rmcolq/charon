@@ -1,5 +1,5 @@
-#ifndef SIFTER_RESULT_H
-#define SIFTER_RESULT_H
+#ifndef CHARON_RESULT_H
+#define CHARON_RESULT_H
 
 #pragma once
 
@@ -53,4 +53,4 @@ class Result
         };
     };
 
-#endif // SIFTER_RESULT_H
+#endif // CHARON_RESULT_H

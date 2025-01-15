@@ -1,5 +1,5 @@
-#ifndef SIFTER_INDEX_MAIN_H
-#define SIFTER_INDEX_MAIN_H
+#ifndef CHARON_INDEX_MAIN_H
+#define CHARON_INDEX_MAIN_H
 
 #pragma once
 
@@ -30,7 +30,7 @@ struct IndexArguments {
     double max_fpr {0.05};
 
     // General options
-    std::string log_file {"sifter.log"};
+    std::string log_file {"charon.log"};
     uint8_t threads { 1 };
     uint8_t verbosity { 0 };
     bool optimize { false };
@@ -56,4 +56,4 @@ Index build_index(const IndexArguments& opt, const InputSummary& summary, InputS
 int index_main(IndexArguments & opt);
 
 
-#endif // SIFTER_INDEX_MAIN_H
+#endif // CHARON_INDEX_MAIN_H

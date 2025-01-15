@@ -1,5 +1,5 @@
-#ifndef SIFTER_COUNTS_H
-#define SIFTER_COUNTS_H
+#ifndef CHARON_COUNTS_H
+#define CHARON_COUNTS_H
 
 #pragma once
 
@@ -53,4 +53,4 @@ protected:
     std::vector<T> mData;
 };
 
-#endif // SIFTER_COUNTS_H
+#endif // CHARON_COUNTS_H

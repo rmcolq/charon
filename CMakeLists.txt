@@ -1,7 +1,7 @@
 # =============================================================================
-# sifter
+# charon
 # =============================================================================
-set(PROJECT_NAME_STR sifter)
+set(PROJECT_NAME_STR charon)
 cmake_minimum_required( VERSION 3.9 FATAL_ERROR )
 project( ${PROJECT_NAME_STR} VERSION 0.0.1 LANGUAGES CXX )
 
@@ -56,4 +56,4 @@ add_executable(${PROJECT_NAME} ${SRC_FILES}
 
 target_link_libraries(${PROJECT_NAME} seqan3::seqan3 plog::plog OpenMP::OpenMP_CXX)
 
-install(TARGETS ${PROJECT_NAME} sifter RUNTIME DESTINATION bin)
+install(TARGETS ${PROJECT_NAME} charon RUNTIME DESTINATION bin)

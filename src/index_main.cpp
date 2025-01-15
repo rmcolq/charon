@@ -394,7 +394,7 @@ int index_main(IndexArguments & opt)
     }
     std::filesystem::create_directory(opt.tmp_dir);
 
-    LOG_INFO << "Running sifter index!";
+    LOG_INFO << "Running charon index!";
 
     auto summary = parse_input_file(opt.input_file);
     auto stats = count_and_store_hashes(opt, summary);
