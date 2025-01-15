@@ -284,6 +284,7 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
 
     auto sorted_pairs = stats.bins_by_size();
     auto max_num_hashes = sorted_pairs.back().second;
+    PLOG_DEBUG << "Max hashes found for bin " << +sorted_pairs.back().first << " : " << max_num_hashes;
 
     uint8_t next_bin = 0;
     std::unordered_map<std::string, uint8_t> last_bin;
@@ -312,8 +313,8 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
         last_bin[category] = assigned_bucket;
         bin_to_bucket_map[bin] = assigned_bucket;
         bucket_to_bins_map[assigned_bucket].push_back(bin);
-        PLOG_INFO << "Bin " << +bin << " assigned to bucket " << +assigned_bucket;
         new_stats.hashes_per_bin[assigned_bucket] += num_hashes;
+        PLOG_INFO << "Bin " << +bin << " assigned to bucket " << +assigned_bucket << " which now has " << new_stats.hashes_per_bin[assigned_bucket] << " hashes";
         assert( stats.records_per_bin.find(bin) != stats.records_per_bin.end() );
         new_stats.records_per_bin[assigned_bucket] += stats.records_per_bin.at(bin);
     }
