@@ -1,4 +1,7 @@
 #include "utils.hpp"
+#include "index_main.hpp"
+
+#include <plog/Log.h>
 
 std::filesystem::path make_absolute(std::filesystem::path path) { return std::filesystem::absolute(path); }
 
@@ -73,4 +76,34 @@ void delete_hashes( const std::vector<uint8_t>& targets, const std::string tmp_o
     }
     if ( std::filesystem::is_empty( tmp_output_folder ) )
         std::filesystem::remove(tmp_output_folder);
+}
+
+size_t bin_size_in_bits(const IndexArguments & opt, const uint64_t & num_elements)
+{
+    assert(opt.num_hash > 0);
+    assert(opt.max_fpr > 0.0);
+    assert(opt.max_fpr < 1.0);
+
+    double const numerator{-static_cast<double>(num_elements * opt.num_hash)};
+    double const denominator{std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash))};
+    double const result{std::ceil(numerator / denominator)};
+
+    if (result > opt.bits){
+        PLOG_WARNING << "Require " << +result << " bits for max_fpr " << opt.max_fpr << " but only have " << +opt.bits << " bits available";
+        return opt.bits;
+    }
+    return result;
+}
+
+double max_num_hashes_for_fpr(const IndexArguments & opt)
+{
+    assert(opt.bits > 0);
+    assert(opt.max_fpr > 0.0);
+    assert(opt.max_fpr < 1.0);
+
+    double const numerator{-static_cast<double>(opt.num_hash / opt.bits)};
+    double const denominator{std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash))};
+    double const result{std::ceil(numerator / denominator)};
+
+    return result;
 }

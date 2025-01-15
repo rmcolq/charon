@@ -6,9 +6,9 @@
 #include <algorithm>
 
 #include "index_main.hpp"
+#include "utils.hpp"
 #include "index.hpp"
 #include "store_index.hpp"
-#include "utils.hpp"
 #include "input_summary.hpp"
 
 #include <plog/Log.h>
@@ -70,17 +70,6 @@ void setup_index_subcommand(CLI::App& app)
     index_subcommand->callback([opt]() { index_main(*opt); });
 }
 
-inline constexpr size_t bin_size_in_bits(const IndexArguments & opt, const uint64_t & num_elements)
-{
-    assert(opt.num_hash > 0);
-    assert(opt.max_fpr > 0.0);
-    assert(opt.max_fpr < 1.0);
-
-    double const numerator{-static_cast<double>(num_elements * opt.num_hash)};
-    double const denominator{std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash))};
-    double const result{std::ceil(numerator / denominator)};
-    return result;
-}
 
 InputSummary parse_input_file(const std::filesystem::path& input_file){
     std::cout << "Parsing input file " << std::endl;
@@ -107,6 +96,10 @@ InputSummary parse_input_file(const std::filesystem::path& input_file){
                 summary.bin_to_category[next_bin] = name;
                 categories.insert(name);
                 summary.filepath_to_bin.emplace_back(std::make_pair(path, next_bin));
+                if (next_bin == std::numeric_limits<uint8_t>::max()){
+                    PLOG_WARNING << "User has reached the maximum number of files which is " << +next_bin << " - ignoring any additional lines!";
+                    break;
+                }
                 next_bin++;
             }
         }
@@ -122,117 +115,16 @@ InputSummary parse_input_file(const std::filesystem::path& input_file){
     return summary;
 }
 
-/*InputStats estimate_index_size(const InputSummary& summary, const IndexArguments& opt){
-    PLOG_INFO << "Estimate size from files";
-    InputStats stats;
-
-    std::unordered_map<uint8_t, uint64_t> lengths;
-
-    for (const auto& pair : summary.filepath_to_bin) {
-        const auto& fasta_file = pair.first;
-        const auto& bin = pair.second;
-
-        PLOG_INFO << "Checking file " << fasta_file;
-        seqan3::sequence_file_input fin{fasta_file};
-        stats.num_files += 1;
-
-        auto length = 0;
-        for (auto & record : fin)
-        {
-            length += record.sequence().size();
-            stats.records_per_bin[bin]++;
-        }
-        lengths[bin] += length;
-    }
-
-    // estimate max bin size
-    uint64_t max_count = 0;
-    for(auto kv : lengths) {
-        //stats.num_bins += 1;
-        stats.hashes_per_bin[kv.first] = static_cast<uint64_t>(round((kv.second * 2)/(opt.window_size + 1)));
-        max_count = std::max(max_count, static_cast<uint64_t>(round(1.1*stats.hashes_per_bin[kv.first])));
-    }
-    opt.bits = std::ceil( ( max_count * std::log( opt.max_fpr ) ) / std::log( 1.0 / std::pow( 2, std::log( 2 ) ) ) );
-
-    //PLOG_DEBUG << "num_bins: " << +stats.num_bins << ", num_files: " << stats.num_files;
-    for (const auto& item: stats.records_per_bin){
-        PLOG_DEBUG << "Bin " << +item.first << " has " << item.second << " records";
-    }
-    for (const auto& item: stats.hashes_per_bin){
-        PLOG_DEBUG << "Bin " << +item.first << " has " << item.second << " hashes";
-    }
-    PLOG_DEBUG << "using: " << opt.bits << " to achieve a max_fpr of " << opt.max_fpr;
-
-    return stats;
-}
-
-InputStats summarise_input(const InputSummary& summary, const IndexArguments& opt){
-    PLOG_INFO << "Estimate size and stats information from files";
-    InputStats stats;
-
-    auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
-    std::unordered_map<uint8_t, std::unordered_set<uint64_t>> hashes;
-
-    for (const auto& pair : summary.filepath_to_bin) {
-        const auto& fasta_file = pair.first;
-        const auto& bin = pair.second;
-
-        bool bin_seen_before = hashes.contains(bin);
-        if (bin_seen_before){
-            continue;
-        }
-
-        PLOG_INFO << "Checking file " << fasta_file;
-        seqan3::sequence_file_input fin{fasta_file};
-        //stats.num_files += 1;
-
-        auto record_count = 0;
-        for (auto & record : fin)
-        {
-            //stats.records_per_bin[bin] += 1;
-            const auto mh = record.sequence() | hash_adaptor | std::views::common;
-            hashes[bin].insert( mh.begin(), mh.end() );
-            record_count++;
-        }
-        //PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << bin << std::endl;
-    }
-    for (const auto& pair : hashes) {
-        const auto& bin = pair.first;
-        const auto& num_hashes = pair.second.size();
-        stats.hashes_per_bin[bin] = num_hashes;
-        //stats.num_bins += 1;
-    }
-
-    // estimate max bin size
-    uint64_t max_count = 0;
-    for(auto kv : stats.hashes_per_bin) {
-        max_count = std::max(max_count, static_cast<uint64_t>(round(kv.second*1.1)));
-    }
-    opt.bits = max_count;
-
-    //std::cout << "num_bins: " << +stats.num_bins << ", num_files: " << stats.num_files << std::endl;
-    for (const auto& item: stats.records_per_bin){
-        std::cout << "Bin " << +item.first << " has " << item.second << " records" << std::endl;
-    }
-    for (const auto& item: stats.hashes_per_bin){
-        std::cout << "Bin " << +item.first << " has " << item.second << " hashes" << std::endl;
-    }
-
-    return stats;
-}*/
-
 InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary& summary)
 {
     PLOG_INFO << "Extracting hashes from files";
     const auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}}, seqan3::window_size{opt.window_size});
     PLOG_DEBUG << "Defined hash adaptor";
-    /*PLOG_DEBUG << "Trying to initialize ibf with " << +summary.num_bins << " bins and " << opt.bits << " bits";
-    seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{summary.num_bins},
-                                         seqan3::bin_size{opt.bits},
-                                         seqan3::hash_function_count{opt.num_hash}};
-    PLOG_DEBUG << "Initialized ibf";*/
     InputStats stats;
     PLOG_DEBUG << "Defined stats";
+
+    const auto max_num_hashes = max_num_hashes_for_fpr(opt);
+
 #pragma omp parallel for
     for (const auto pair : summary.filepath_to_bin) {
         const auto& fasta_file = pair.first;
@@ -255,6 +147,10 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
         store_hashes( std::to_string(bin), hashes, opt.tmp_dir );
         stats.hashes_per_bin[bin] += hashes.size();
         PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin;
+
+        if (stats.hashes_per_bin[bin] > max_num_hashes){
+            PLOG_WARNING << "File " << fasta_file << " with " << hashes.size() << " will exceed max_fpr " << opt.max_fpr;
+        }
     }
 
     return stats;
@@ -338,7 +234,7 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
 Index build_index(const IndexArguments& opt, const InputSummary& summary, InputStats& stats, const std::unordered_map<uint8_t, std::vector<uint8_t>>& bucket_to_bins_map)
 {
     const auto max_num_hashes = stats.max_num_hashes();
-    const auto num_bits = std::min(bin_size_in_bits(opt, max_num_hashes),opt.bits);
+    const auto num_bits = bin_size_in_bits(opt, max_num_hashes);
     PLOG_INFO << "Create new IBF with " << +summary.num_bins << " bins and " << +num_bits << " bits";
     seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{summary.num_bins},
                                              seqan3::bin_size{num_bits},

@@ -38,13 +38,7 @@ struct IndexArguments {
 
 void setup_index_subcommand(CLI::App& app);
 
-inline constexpr size_t bin_size_in_bits(const IndexArguments & opt, const uint64_t & num_elements);
-
 InputSummary parse_input_file(const std::filesystem::path& input_file);
-
-//InputStats estimate_index_size(const InputSummary& summary, const IndexArguments& opt);
-
-//InputStats summarise_input(const InputSummary& summary, const IndexArguments& opt);
 
 InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary& summary);
 
