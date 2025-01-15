@@ -85,12 +85,7 @@ class Index
             return summary_.bin_to_category;
         }
 
-        /*seqan3::interleaved_bloom_filter<> & ibf()
-        {
-            return ibf_;
-        }*/
-
-        seqan3::interleaved_bloom_filter<> const & ibf() const
+        seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> const & ibf() const
         {
             return ibf_;
         }

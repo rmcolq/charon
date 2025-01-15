@@ -239,8 +239,7 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
         const auto& bin = pair.second;
         stats.records_per_bin[bin] += 0;
 
-
-        PLOG_INFO << "Adding file " << fasta_file;
+        PLOG_DEBUG << "Adding file " << fasta_file;
         seqan3::sequence_file_input fin{fasta_file};
 #pragma omp critical
         stats.num_files += 1;
@@ -248,16 +247,14 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
         auto record_count = 0;
         std::unordered_set<uint64_t> hashes;
         for (const auto & record : fin){
-#pragma omp critical
             stats.records_per_bin[bin] += 1;
             const auto mh = record.sequence() | hash_adaptor | std::views::common;
             hashes.insert( mh.begin(), mh.end() );
             record_count++;
         }
-#pragma omp critical
         store_hashes( std::to_string(bin), hashes, opt.tmp_dir );
         stats.hashes_per_bin[bin] += hashes.size();
-        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin << std::endl;
+        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size() << " hashes to bin " << +bin;
     }
 
     return stats;
@@ -357,7 +354,7 @@ Index build_index(const IndexArguments& opt, const InputSummary& summary, InputS
             {
                 ibf.emplace( value, seqan3::bin_index{bucket} );
             }
-            PLOG_INFO << "Added " << hashes.size() << " hashes to bin " << +bucket << std::endl;
+            PLOG_DEBUG << "Added " << hashes.size() << " hashes to bin " << +bucket;
         }
         delete_hashes( bins, opt.tmp_dir );
     }
