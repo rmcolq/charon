@@ -13,20 +13,7 @@
 #include "result.hpp"
 
 class Index;
-
-
-/// Collection of all options of index subcommand.
-struct ClassifyArguments {
-    // IO options
-    std::string read_file;
-    std::string db;
-    uint8_t chunk_size { 100 };
-
-    // General options
-    std::string log_file {"charon.log"};
-    uint8_t threads { 1 };
-    uint8_t verbosity { 0 };
-};
+struct ClassifyArguments;
 
 struct my_traits : seqan3::sequence_file_input_default_traits_dna
 {

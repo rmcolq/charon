@@ -1,7 +1,3 @@
-# SPDX-FileCopyrightText: 2006-2023, Knut Reinert & Freie Universität Berlin
-# SPDX-FileCopyrightText: 2016-2023, Knut Reinert & MPI für molekulare Genetik
-# SPDX-License-Identifier: CC0-1.0
-
 # CPM Package Lock
 # This file should be committed to version control
 
@@ -23,6 +19,20 @@ CPMDeclarePackage (plog
                    SYSTEM TRUE
                    EXCLUDE_FROM_ALL TRUE
                    OPTIONS "INSTALL_PLOG OFF" "CMAKE_MESSAGE_LOG_LEVEL WARNING"
+)
+CPMDeclarePackage( statslib
+        NAME statslib
+        GITHUB_REPOSITORY kthohr/stats
+        VERSION 3.4.0
+        GIT_SHALLOW TRUE
+        DOWNLOAD_ONLY TRUE
+)
+CPMDeclarePackage ( gcem
+        NAME gcem
+        GITHUB_REPOSITORY kthohr/gcem
+        VERSION 1.18.0
+        GIT_SHALLOW TRUE
+        DOWNLOAD_ONLY TRUE
 )
 # googletest
 set (GOOGLETEST_VERSION 1.15.2)

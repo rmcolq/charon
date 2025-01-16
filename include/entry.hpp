@@ -17,11 +17,11 @@ class ReadEntry
         std::string read_id_;
         uint16_t length_;
         uint32_t num_hashes_{0};
+        std::unordered_map<uint8_t, std::vector<bool>> bits_; // this collects over all bins
+        std::unordered_map<std::string, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
         Counts<uint32_t> counts_;
-        std::unordered_map<uint8_t, std::vector<bool>> bits_;
-        std::unordered_map<std::string, std::vector<bool>> any_bits_;
-        std::unordered_map<std::string, std::vector<bool>> max_bits_;
-
+        std::vector<double> unique_props_; // this collects over categories the proportion of all hashes which were unique to the given category
+        std::vector<double> probability_; // this collects over categories the probability of this read given the data come from that category
     public:
         ReadEntry() = default;
         ReadEntry(ReadEntry const &) = default;
@@ -40,7 +40,7 @@ class ReadEntry
                     bits_[i].reserve(length);
                 }
                 for (auto i=0; i<summary.num_categories(); ++i){
-                    any_bits_[summary.categories.at(i)].reserve(length);
+                    //any_bits_[summary.categories.at(i)].reserve(length);
                     max_bits_[summary.categories.at(i)].reserve(length);
                 }
             }
@@ -61,21 +61,16 @@ class ReadEntry
             }
         };
 
-        void categorize(const InputSummary & summary) {
+        void get_max_bits(const InputSummary & summary) {
             PLOG_DEBUG << "categorize";
             for (auto i=0; i<summary.num_categories(); ++i){
-                any_bits_[summary.categories.at(i)].resize(num_hashes_, 0);
+                //any_bits_[summary.categories.at(i)].resize(num_hashes_, 0);
                 max_bits_[summary.categories.at(i)].resize(num_hashes_, 0);
             }
             for (const auto &[bin, bitmap]: bits_) {
                 const auto category = summary.bin_to_category.at(bin);
                 PLOG_DEBUG << +bin << " belongs to " << category;
 
-                PLOG_DEBUG << num_hashes_ << " " << any_bits_[category].size() << " " << bitmap.size();
-                for (auto j = 0; j < num_hashes_; ++j) {
-                    any_bits_[category][j] = bitmap[j] | any_bits_[category][j];
-                }
-                PLOG_DEBUG << "done any bits";
                 auto current_bit_count = std::count(bitmap.begin(), bitmap.end(), true);
                 const auto &max_bitmap = max_bits_[category];
                 auto max_bit_count = std::count(max_bitmap.begin(), max_bitmap.end(), true);
@@ -87,7 +82,7 @@ class ReadEntry
             }
         };
 
-        void collect_counts(const InputSummary & summary)
+        void get_counts(const InputSummary & summary)
         {
             PLOG_DEBUG << "collect_counts for read_id " << read_id_;
             for (auto i=0; i<summary.num_categories(); ++i){
@@ -106,6 +101,36 @@ class ReadEntry
             }
             PLOG_DEBUG << "done";
         };
+
+        void get_unique_props(const InputSummary & summary)
+        {
+            PLOG_DEBUG << "collect_unique_props for read_id " << read_id_;
+            std::vector<uint32_t> unique_counts(summary.num_categories(),0);
+            std::vector<uint8_t> found;
+            for (auto k=0; k<num_hashes_; ++k) {
+                found.clear();
+                for (auto i = 0; i < summary.num_categories(); ++i) {
+                    const auto row = max_bits_[summary.categories.at(i)];
+                    if (row[k]) {
+                        found.push_back(i);
+                    }
+                }
+                if (found.size() == 1) {
+                    auto i = found.front();
+                    unique_counts[i] += 1;
+                }
+            }
+            for (auto i = 0; i < summary.num_categories(); ++i) {
+                unique_props_.emplace_back(unique_counts[i]/num_hashes_);
+            }
+            return;
+        };
+
+        void post_process(const InputSummary& summary){
+            get_max_bits(summary);
+            get_counts(summary);
+            get_unique_props(summary);
+        }
 
         void print_result(const InputSummary & summary){
             std::cout << read_id_ << "\t" << num_hashes_ << "\t";
