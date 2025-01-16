@@ -122,13 +122,13 @@ class Model
             ready = true;
         }
 
-        /*ProbPair prob(const float & read_proportion){
+        ProbPair prob(const float & read_proportion){
             const auto p_err = stats::dexp(read_proportion,1000);
             const auto p_pos = stats::dgamma(read_proportion,pos.shape,pos.scale);
             const auto p_neg = stats::dgamma(read_proportion,neg.shape,neg.scale);
             const auto total = p_err + p_pos + p_neg;
             return ProbPair(p_pos/total, (p_err + p_neg)/total);
-        }*/
+        }
 
     friend class StatsModel;
 

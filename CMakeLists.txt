@@ -59,6 +59,5 @@ add_executable(${PROJECT_NAME} ${SRC_FILES}
 )
 
 target_link_libraries(${PROJECT_NAME} PRIVATE seqan3::seqan3 plog::plog OpenMP::OpenMP_CXX)
-#target_link_libraries(${PROJECT_NAME} INTERFACE statslib::statslib)
 
 install(TARGETS ${PROJECT_NAME} charon RUNTIME DESTINATION bin)
