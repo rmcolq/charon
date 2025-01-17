@@ -22,7 +22,9 @@ struct my_traits : seqan3::sequence_file_input_default_traits_dna
 
 void setup_classify_subcommand(CLI::App& app);
 
-Result classify_reads(const Index& index, const ClassifyArguments& opt);
+void classify_reads(const ClassifyArguments& opt, const Index& index, Result& result);
+
+void extract(const ClassifyArguments& opt, Result& result);
 
 int classify_main(ClassifyArguments & opt);
 

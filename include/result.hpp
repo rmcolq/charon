@@ -36,6 +36,17 @@ class Result
             cached_read_ids.reserve(2000);
         };
 
+        uint8_t category_index(const std::string& category)
+        {
+            return summary_.category_index(category);
+        }
+
+        uint8_t call(const std::string& read_id)
+        {
+            PLOG_DEBUG << "Check call for read " << read_id;
+            return entries.at(read_id).call();
+        }
+
         void update_entry(const std::string read_id, const uint16_t length, const auto & entry){
             /*std::cout << read_id << " ";
             for (const auto i : entry){
@@ -101,7 +112,7 @@ class Result
                 const auto & category = summary_.categories.at(i);
                 PLOG_INFO << category << " :\t\t" << call_counts.at(i);
             }
-            PLOG_INFO << "unclassified :\t\t" << unclassified;
+            PLOG_INFO << "unclassified :\t" << unclassified;
         }
     };
 

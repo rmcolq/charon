@@ -65,6 +65,11 @@ class Index
             return summary_.num_categories();
         }
 
+        std::vector<std::string> categories() const
+        {
+            return summary_.categories;
+        }
+
         double max_fpr() const
         {
             return max_fpr_;

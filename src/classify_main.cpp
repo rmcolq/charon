@@ -12,6 +12,8 @@
 #include <plog/Initializers/RollingFileInitializer.h>
 #include <seqan3/search/views/minimiser_hash.hpp>
 #include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/io/sequence_file/output.hpp>
+#include <seqan3/io/sequence_file/record.hpp>
 #include <seqan3/utility/views/enforce_random_access.hpp>
 #include <seqan3/alphabet/quality/phred_base.hpp>
 #include <seqan3/utility/range/concept.hpp>
@@ -41,7 +43,16 @@ void setup_classify_subcommand(CLI::App& app)
 
     classify_subcommand->add_option("--db", opt->db, "Prefix for the index.")
         ->type_name("FILE")
+        ->required()
         ->check(CLI::ExistingPath.description(""));
+
+    classify_subcommand->add_option("-e,--extract", opt->category_to_extract, "Reads from this category in the index will be extracted to file.")
+            ->type_name("STRING");
+
+    classify_subcommand->add_option("--extract_file", opt->extract_file, "Fasta/q file for output")
+            ->transform(make_absolute)
+            ->check(CLI::ExistingFile.description(""))
+            ->type_name("FILE");
 
     classify_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
@@ -54,11 +65,8 @@ void setup_classify_subcommand(CLI::App& app)
     classify_subcommand->callback([opt]() { classify_main(*opt); });
 }
 
-Result classify_reads(const Index& index, const ClassifyArguments& opt){
+void classify_reads(const ClassifyArguments& opt, const Index& index, Result& result){
     PLOG_INFO << "Classifying file " << opt.read_file;
-    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
-    auto result = Result(opt, index.summary());
-    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
     PLOG_DEBUG << "Defined hash_adaptor";
@@ -101,7 +109,33 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
     }
     result.complete();
     result.print_summary();
-    return result;
+}
+
+void extract(const ClassifyArguments& opt, Result& result)
+{
+    LOG_INFO << "Extracting reads matching category " << opt.category_to_extract;
+    const auto category = result.category_index(opt.category_to_extract);
+    LOG_DEBUG << "Corresponds to index " << +category;
+
+    seqan3::sequence_file_input<my_traits> fin{opt.read_file};
+    seqan3::sequence_file_output fout{opt.extract_file};
+
+    // std::views::filter takes a function object (a lambda in this case) as input that returns a boolean
+    auto call_matches_category_filter = std::views::filter(
+        [&category, &result](auto const & record)
+        {
+            auto read_id = split(record.id(), " ")[0];;
+            return result.call(read_id) == category;
+        });
+
+    auto total = 0;
+    for (auto & record : fin | call_matches_category_filter)
+    {
+        fout.push_back(record);
+        total += 1;
+    }
+
+    LOG_INFO << "Wrote " << total << " reads to file " << opt.extract_file.c_str() ;
 }
 
 
@@ -124,7 +158,26 @@ int classify_main(ClassifyArguments & opt)
     auto index = Index();
     load_index(index, opt.db);
 
-    auto result = classify_reads(index, opt);
+    bool run_extract = (opt.category_to_extract != "");
+    const auto categories = index.categories();
+    if (run_extract and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
+    {
+        std::string options = "";
+        for (auto i: categories)
+            options += i + " ";
+        LOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ " << options << "]";
+        return 1;
+    } else if (run_extract and opt.extract_file == ""){
+        opt.extract_file = opt.read_file + ".extracted.fq";
+    }
+
+    auto result = Result(opt, index.summary());
+    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
+
+    classify_reads(opt, index, result);
+
+    if (run_extract)
+        extract(opt, result);
 
     return 0;
 }

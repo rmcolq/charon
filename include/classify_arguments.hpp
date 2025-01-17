@@ -16,6 +16,10 @@ struct ClassifyArguments {
     float lo_hi_threshold {0.2};
     uint16_t num_reads_to_fit {1000};
 
+    // Output options
+    std::string category_to_extract;
+    std::string extract_file;
+
     // General options
     std::string log_file {"charon.log"};
     uint8_t threads { 1 };
