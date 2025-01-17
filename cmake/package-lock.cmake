@@ -2,7 +2,7 @@
 # This file should be committed to version control
 
 # seqan3
-set (SEQAN3_VERSION 6b681fb2eae5ab2997d293e99fc6a7f869a20316)
+set (SEQAN3_VERSION 30bdf8d0a5d59b79342b472504b95ae50c33da6d)
 CPMDeclarePackage (seqan3
                    NAME seqan3
                    GIT_TAG ${SEQAN3_VERSION}
