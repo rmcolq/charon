@@ -57,7 +57,7 @@ void setup_classify_subcommand(CLI::App& app)
 Result classify_reads(const Index& index, const ClassifyArguments& opt){
     PLOG_INFO << "Classifying file " << opt.read_file;
     PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
-    auto result = Result(index.summary());
+    auto result = Result(opt, index.summary());
     PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
@@ -95,10 +95,11 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
                 result.update_entry(read_id, read_length, entry);
             }
 #pragma omp critical
-            result.print_result(read_id);
+            result.post_process_read(read_id);
         }
         records.clear();
     }
+    result.complete();
     PLOG_INFO << "Read all reads";
     return result;
 }

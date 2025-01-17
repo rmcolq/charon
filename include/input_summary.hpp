@@ -32,6 +32,24 @@ struct InputSummary
             return categories.size();
         }
 
+        uint8_t category_index(const std::string category) const
+        {
+            for (auto i=0; i<categories.size(); ++i)
+            {
+                if (category == categories.at(i))
+                    return i;
+            }
+            return std::numeric_limits<uint8_t>::max();
+        }
+
+        std::string category_name(const uint8_t index) const
+        {
+            if (index > categories.size())
+                return "";
+            else
+                return categories.at(index);
+        }
+
     template <seqan3::cereal_archive archive_t>
     void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t & archive)
     {

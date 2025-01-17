@@ -122,7 +122,7 @@ class Model
             ready = true;
         }
 
-        ProbPair prob(const float & read_proportion){
+        ProbPair prob(const float & read_proportion) const {
             const auto p_err = stats::dexp(read_proportion,1000);
             const auto p_pos = stats::dgamma(read_proportion,pos.shape,pos.scale);
             const auto p_neg = stats::dgamma(read_proportion,neg.shape,neg.scale);
@@ -137,10 +137,10 @@ class Model
 class StatsModel
 {
     private:
-        bool ready {false};
-        float lo_hi_threshold;
-        std::vector<TrainingData> training_data;
-        std::vector<Model> models;
+        bool ready_ {false};
+        float lo_hi_threshold_;
+        std::vector<TrainingData> training_data_;
+        std::vector<Model> models_;
 
     public:
         StatsModel() = default;
@@ -151,63 +151,82 @@ class StatsModel
         ~StatsModel() = default;
 
         StatsModel(const ClassifyArguments& opt, const InputSummary & summary):
-        lo_hi_threshold(opt.lo_hi_threshold)
+                lo_hi_threshold_(opt.lo_hi_threshold)
         {
             for (auto i=0; i<summary.num_categories(); ++i){
-                models.emplace_back(Model());
-                training_data.emplace_back(TrainingData(opt));
+                models_.emplace_back(Model());
+                training_data_.emplace_back(TrainingData(opt));
             }
+            PLOG_DEBUG << "Initialize stats model with " << training_data_.size() << " sets of training data ";
         };
+
+        bool ready()
+        {
+            return ready_;
+        }
 
         void check_if_ready()
         {
-            if (ready)
+            if (ready_)
                 return;
-            for (const auto & model : models){
+            for (const auto & model : models_){
                 if (not model.ready)
                     return;
             }
-            ready = true;
-            training_data.clear();
-            training_data.resize(0);
+            ready_ = true;
+            training_data_.clear();
+            training_data_.resize(0);
         }
 
         void train_model_at(const uint8_t & i)
         {
-            const auto & data = training_data[i];
+            const auto & data = training_data_[i];
             assert(data.complete and data.pos_complete and data.neg_complete);
 
-            auto & model = models[i];
+            auto & model = models_[i];
             assert(not model.ready);
             model.train(data);
             check_if_ready();
         }
 
-        void add_read_to_training_data(const std::vector<float>& read_proportions){
+        bool add_read_to_training_data(const std::vector<float>& read_proportions){
             auto pos_i = std::numeric_limits<uint8_t>::max();
             bool add_to_training = true;
+            PLOG_DEBUG << "Decide if read is training candidate";
             for (uint8_t i=0; i < read_proportions.size(); ++i) {
                 const auto & val = read_proportions.at(i);
-                if (val > lo_hi_threshold & pos_i == std::numeric_limits<uint8_t>::max()){
+                PLOG_DEBUG << "Read prop " << val << " at " << +i;
+                if (val > lo_hi_threshold_ & pos_i == std::numeric_limits<uint8_t>::max()){
                     pos_i = i;
-                } else if ( val > lo_hi_threshold ){
+                } else if (val > lo_hi_threshold_ ){
                     add_to_training = false;
                 }
             }
+            if (pos_i == std::numeric_limits<uint8_t>::max())
+                add_to_training = false;
+            PLOG_DEBUG << "add_to_training is " << add_to_training << " with hi pos " << +pos_i;
 
             if (add_to_training) {
-                auto ready_to_train = training_data[pos_i].add_pos(read_proportions[pos_i]);
+                PLOG_DEBUG << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
+                auto ready_to_train = training_data_.at(pos_i).add_pos(read_proportions[pos_i]);
                 if (ready_to_train)
                     train_model_at(pos_i);
                 for (uint8_t i=0; i < read_proportions.size(); ++i) {
                     if (i != pos_i){
-                        ready_to_train = training_data[i].add_neg(read_proportions[i]);
+                        ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
                         if (ready_to_train)
                             train_model_at(pos_i);
                     }
                 }
             }
+            return ready_;
         };
+
+        ProbPair classify(const auto & i, const float & read_proportion) const
+        {
+            const auto & model = models_.at(i);
+            return model.prob(read_proportion);
+        }
 };
 
 #endif

@@ -9,6 +9,7 @@
 
 #include <counts.hpp>
 #include <input_summary.hpp>
+#include <classify_stats.hpp>
 
 
 class ReadEntry
@@ -18,10 +19,11 @@ class ReadEntry
         uint16_t length_;
         uint32_t num_hashes_{0};
         std::unordered_map<uint8_t, std::vector<bool>> bits_; // this collects over all bins
-        std::unordered_map<std::string, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
+        std::unordered_map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
         Counts<uint32_t> counts_;
-        std::vector<double> unique_props_; // this collects over categories the proportion of all hashes which were unique to the given category
-        std::vector<double> probability_; // this collects over categories the probability of this read given the data come from that category
+        std::vector<float> unique_props_; // this collects over categories the proportion of all hashes which were unique to the given category
+        std::vector<double> probabilities_; // this collects over categories the probability of this read given the data come from that category
+        uint8_t call_ = std::numeric_limits<uint8_t>::max();
     public:
         ReadEntry() = default;
         ReadEntry(ReadEntry const &) = default;
@@ -40,10 +42,16 @@ class ReadEntry
                     bits_[i].reserve(length);
                 }
                 for (auto i=0; i<summary.num_categories(); ++i){
-                    //any_bits_[summary.categories.at(i)].reserve(length);
-                    max_bits_[summary.categories.at(i)].reserve(length);
+                    max_bits_[i].reserve(length);
+                    unique_props_.emplace_back(0);
+                    probabilities_.emplace_back(1);
                 }
             }
+
+        std::vector<float> unique_props() const
+        {
+            return unique_props_;
+        }
 
         void update_entry(const auto & entry) {
             // this "entry" is a bitvector with a 1 or 0 for each bin in the ibf
@@ -57,100 +65,144 @@ class ReadEntry
             for (auto i = 0; i < entry.size(); ++i) {
                 const auto row = entry[i];
                 //PLOG_DEBUG << "row " << i << " " << row;
-                bits_[i].push_back(row);
+                bits_.at(i).push_back(row);
             }
         };
 
         void get_max_bits(const InputSummary & summary) {
-            PLOG_DEBUG << "categorize";
-            for (auto i=0; i<summary.num_categories(); ++i){
-                //any_bits_[summary.categories.at(i)].resize(num_hashes_, 0);
-                max_bits_[summary.categories.at(i)].resize(num_hashes_, 0);
+            PLOG_DEBUG << "get max bits per category";
+            const auto num_categories = max_bits_.size();
+            for (auto i=0; i<num_categories; ++i){
+                max_bits_.at(i).resize(num_hashes_, 0);
             }
             for (const auto &[bin, bitmap]: bits_) {
                 const auto category = summary.bin_to_category.at(bin);
-                PLOG_DEBUG << +bin << " belongs to " << category;
+                const auto index = summary.category_index(category);
+                PLOG_DEBUG << +bin << " belongs to " << category << " with index " << +index;
 
                 auto current_bit_count = std::count(bitmap.begin(), bitmap.end(), true);
-                const auto &max_bitmap = max_bits_[category];
+                const auto &max_bitmap = max_bits_.at(index);
                 auto max_bit_count = std::count(max_bitmap.begin(), max_bitmap.end(), true);
                 PLOG_DEBUG << current_bit_count << " " << max_bit_count;
                 if (current_bit_count > max_bit_count) {
                     PLOG_DEBUG << "redefine max";
-                    max_bits_[category] = bitmap;
+                    max_bits_.at(index) = bitmap;
                 }
             }
         };
 
-        void get_counts(const InputSummary & summary)
+        void get_counts()
         {
             PLOG_DEBUG << "collect_counts for read_id " << read_id_;
-            for (auto i=0; i<summary.num_categories(); ++i){
+            const auto num_categories = max_bits_.size();
+            for (auto i=0; i<num_categories; ++i){
                 for (auto j=0; j<=i; ++j){
-                    const auto row = max_bits_[summary.categories.at(i)];
-                    const auto col = max_bits_[summary.categories.at(j)];
+                    const auto row = max_bits_.at(i);
+                    const auto col = max_bits_.at(j);
                     for (auto k=0; k<num_hashes_; ++k){
-                        PLOG_DEBUG << "(" << i << "," << j << ")" << k << row.size() << col.size();
-                        if (row[k] and col[k]){
+                        //PLOG_DEBUG << "(" << i << "," << j << ")" << k << row.size() << col.size();
+                        if (row.at(k) and col.at(k)){
                             counts_(i,j) += 1;
                         }
                     }
-                    PLOG_DEBUG << "done hashes";
+                    //PLOG_DEBUG << "done hashes";
                 }
-                PLOG_DEBUG << "done category " << i;
+                //PLOG_DEBUG << "done category " << i;
             }
-            PLOG_DEBUG << "done";
+            //PLOG_DEBUG << "done";
         };
 
-        void get_unique_props(const InputSummary & summary)
+        void get_unique_props()
         {
             PLOG_DEBUG << "collect_unique_props for read_id " << read_id_;
-            std::vector<uint32_t> unique_counts(summary.num_categories(),0);
+            const auto num_categories = unique_props_.size();
+            std::vector<uint32_t> unique_counts(num_categories,0);
             std::vector<uint8_t> found;
             for (auto k=0; k<num_hashes_; ++k) {
                 found.clear();
-                for (auto i = 0; i < summary.num_categories(); ++i) {
-                    const auto row = max_bits_[summary.categories.at(i)];
-                    if (row[k]) {
+                for (auto i = 0; i < num_categories; ++i) {
+                    const auto row = max_bits_.at(i);
+                    if (row.at(k)) {
                         found.push_back(i);
                     }
                 }
                 if (found.size() == 1) {
                     auto i = found.front();
-                    unique_counts[i] += 1;
+                    unique_counts.at(i) += 1;
                 }
             }
-            for (auto i = 0; i < summary.num_categories(); ++i) {
-                unique_props_.emplace_back(unique_counts[i]/num_hashes_);
+            for (auto i = 0; i < num_categories; ++i) {
+                unique_props_.at(i) = static_cast< float >(unique_counts.at(i))/static_cast< float >(num_hashes_);
             }
             return;
         };
 
         void post_process(const InputSummary& summary){
             get_max_bits(summary);
-            get_counts(summary);
-            get_unique_props(summary);
+            get_counts();
+            get_unique_props();
+        }
+
+        void call_category()
+        {
+            float first = 0;
+            uint8_t first_pos = 0;
+            float second = 0;
+            uint8_t second_pos = 0;
+
+            for (auto i=0; i<probabilities_.size(); ++i)
+            {
+                const float & val = probabilities_.at(i);
+                if (val > second) {
+                    second = val;
+                    second_pos = i;
+                    if (second > first)
+                        std::swap(first,second);
+                        std::swap(first_pos,second_pos);
+                }
+            }
+            if ((first > 0.9999 or second < 0.0001) and (first > 0.01))
+                call_ = first_pos;
+        }
+
+        void classify(const StatsModel& stats_model)
+        {
+            PLOG_DEBUG << "Classify read ";
+            for (auto i=0; i<unique_props_.size(); ++i)
+            {
+                const auto & read_proportion = unique_props_.at(i);
+                const auto result_pair = stats_model.classify(i,read_proportion);
+                PLOG_DEBUG << "Pos " << +i << " has read proportion " << read_proportion << " yielding probs " << result_pair.pos << " and " << result_pair.neg;
+                for (auto j=0; j<unique_props_.size(); ++j)
+                {
+                    if (i == j)
+                        probabilities_.at(j) *= result_pair.pos;
+                    else
+                        probabilities_.at(j) *= result_pair.neg;
+                }
+            }
+            call_category();
         }
 
         void print_result(const InputSummary & summary){
-            std::cout << read_id_ << "\t" << num_hashes_ << "\t";
+            std::cout << read_id_ << "\t" << num_hashes_ << "\t" << summary.category_name(call_) << "\t";
             for (auto i=0; i<summary.num_categories(); i++){
-                std::cout << summary.categories.at(i) << ":" << counts_(i,i) << "\t";
+                std::cout << summary.categories.at(i) << ":" << counts_(i,i) << ":" << probabilities_.at(i) << "\t";
             }
             for (auto i=0; i<summary.num_categories(); i++){
                 for (auto j=0; j<i; j++) {
-                    std::cout << summary.categories.at(i) << "x" << summary.categories.at(j) << ":" << counts_(i, j) << "\t";
+                    std::cout << summary.categories.at(i) << "_x_" << summary.categories.at(j) << ":" << counts_(i, j) << "\t";
                 }
             }
             /*for (auto i=0; i<bits_.size(); i++){
-                for (auto j=0; j<bits_[i].size(); j++) {
-                    std::cout << +bits_[i][j];
+                for (auto j=0; j<bits_.at(i).size(); j++) {
+                    std::cout << +bits_.at(i)[j];
                 }
                 std::cout << "\t";
             }*/
             for (auto i=0; i<summary.num_categories(); i++){
-                const auto & category = summary.categories.at(i);
-                const auto & bitvector = max_bits_.at(category);
+                //const auto & category = summary.categories.at(i);
+                const auto & bitvector = max_bits_.at(i);
                 for (auto j=0; j<bitvector.size(); j++) {
                     std::cout << +bitvector.at(j);
                 }
