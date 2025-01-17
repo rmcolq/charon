@@ -54,7 +54,7 @@ class Result
         void classify_read(const std::string & read_id)
         {
             entries.at(read_id).classify(stats_model);
-            entries.at(read_id).print_result(summary_);
+            entries.at(read_id).print_assignment_result(summary_);
         }
 
         void classify_cache()
@@ -84,7 +84,26 @@ class Result
                 if (training_complete)
                     classify_cache();
             }
-        };
+        }
+
+        void print_summary() {
+            uint64_t unclassified = 0;
+            std::vector<uint64_t> call_counts(summary_.num_categories(), 0);
+            for (const auto & [read_id, entry] : entries){
+                const auto & call = entry.call();
+                if (call == std::numeric_limits<uint8_t>::max())
+                    unclassified += 1;
+                else
+                    call_counts.at(call) += 1;
+            }
+            PLOG_INFO << "Results summary: ";
+            for (auto i = 0; i < call_counts.size(); i++) {
+                const auto & category = summary_.categories.at(i);
+                PLOG_INFO << category << " :\t\t" << call_counts.at(i);
+            }
+            PLOG_INFO << "unclassified :\t\t" << unclassified;
+        }
     };
+
 
 #endif // CHARON_RESULT_H

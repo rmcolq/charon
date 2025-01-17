@@ -100,7 +100,7 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
         records.clear();
     }
     result.complete();
-    PLOG_INFO << "Read all reads";
+    result.print_summary();
     return result;
 }
 
