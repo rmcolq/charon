@@ -47,7 +47,7 @@ class Result
             return entries.at(read_id).call();
         }
 
-        void update_entry(const std::string read_id, const uint16_t length, const auto & entry){
+        void update_entry(const std::string read_id, const uint32_t length, const auto & entry){
             /*std::cout << read_id << " ";
             for (const auto i : entry){
                 std:: cout << +i;

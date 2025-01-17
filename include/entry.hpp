@@ -15,7 +15,7 @@
 class ReadEntry {
 private:
     std::string read_id_;
-    uint16_t length_;
+    uint32_t length_;
     uint32_t num_hashes_{0};
     std::unordered_map<uint8_t, std::vector<bool>> bits_; // this collects over all bins
     std::unordered_map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
@@ -36,7 +36,7 @@ public:
 
     ~ReadEntry() = default;
 
-    ReadEntry(const std::string read_id, const uint16_t length, const InputSummary &summary) :
+    ReadEntry(const std::string read_id, const uint32_t length, const InputSummary &summary) :
             read_id_(read_id),
             length_(length) {
         PLOG_DEBUG << "Initialize entry with read_id " << read_id << " and length " << length;

@@ -51,7 +51,7 @@ void setup_classify_subcommand(CLI::App& app)
 
     classify_subcommand->add_option("--extract_file", opt->extract_file, "Fasta/q file for output")
             ->transform(make_absolute)
-            ->check(CLI::ExistingFile.description(""))
+            ->check(CLI::NonexistentPath.description(""))
             ->type_name("FILE");
 
     classify_subcommand->add_option("--log", opt->log_file, "File for log")
@@ -92,7 +92,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
             //PLOG_INFO << "Processing read " << record.id();
             auto read_id = split(record.id(), " ")[0];
             auto read_length = record.sequence().size();
-            if (read_length > std::numeric_limits<uint16_t>::max()){
+            if (read_length > std::numeric_limits<uint32_t>::max()){
                 PLOG_INFO << "Ignoring read " << record.id() << " as too long!";
                 continue;
             }
