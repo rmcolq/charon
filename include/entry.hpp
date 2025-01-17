@@ -76,7 +76,7 @@ public:
     };
 
     void get_max_bits(const InputSummary &summary) {
-        PLOG_DEBUG << "get max bits per category";
+        PLOG_DEBUG << "Get max bits per category";
         const auto num_categories = max_bits_.size();
         for (auto i = 0; i < num_categories; ++i) {
             max_bits_.at(i).resize(num_hashes_, 0);
@@ -84,21 +84,21 @@ public:
         for (const auto &[bin, bitmap]: bits_) {
             const auto category = summary.bin_to_category.at(bin);
             const auto index = summary.category_index(category);
-            PLOG_DEBUG << +bin << " belongs to " << category << " with index " << +index;
+            PLOG_VERBOSE << +bin << " belongs to " << category << " with index " << +index;
 
             auto current_bit_count = std::count(bitmap.begin(), bitmap.end(), true);
             const auto &max_bitmap = max_bits_.at(index);
             auto max_bit_count = std::count(max_bitmap.begin(), max_bitmap.end(), true);
-            PLOG_DEBUG << current_bit_count << " " << max_bit_count;
+            PLOG_VERBOSE << current_bit_count << " " << max_bit_count;
             if (current_bit_count > max_bit_count) {
-                PLOG_DEBUG << "redefine max";
+                PLOG_VERBOSE << "redefine max";
                 max_bits_.at(index) = bitmap;
             }
         }
     };
 
     void get_counts() {
-        PLOG_DEBUG << "collect_counts for read_id " << read_id_;
+        PLOG_DEBUG << "Collect_counts for read_id " << read_id_;
         const auto num_categories = max_bits_.size();
         for (auto i = 0; i < num_categories; ++i) {
             for (auto j = 0; j <= i; ++j) {

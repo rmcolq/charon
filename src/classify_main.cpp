@@ -69,10 +69,10 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
     PLOG_INFO << "Classifying file " << opt.read_file;
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
-    PLOG_DEBUG << "Defined hash_adaptor";
+    PLOG_VERBOSE << "Defined hash_adaptor";
 
     auto agent = index.agent();
-    PLOG_DEBUG << "Defined agent";
+    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<my_traits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
@@ -165,7 +165,7 @@ int classify_main(ClassifyArguments & opt)
         std::string options = "";
         for (auto i: categories)
             options += i + " ";
-        LOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ " << options << "]";
+        PLOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ " << options << "]";
         return 1;
     } else if (run_extract and opt.extract_file == ""){
         opt.extract_file = opt.read_file + ".extracted.fq";

@@ -192,10 +192,10 @@ class StatsModel
         bool add_read_to_training_data(const std::vector<float>& read_proportions){
             auto pos_i = std::numeric_limits<uint8_t>::max();
             bool add_to_training = true;
-            PLOG_DEBUG << "Decide if read is training candidate";
+            PLOG_VERBOSE << "Decide if read is training candidate";
             for (uint8_t i=0; i < read_proportions.size(); ++i) {
                 const auto & val = read_proportions.at(i);
-                PLOG_DEBUG << "Read prop " << val << " at " << +i;
+                PLOG_VERBOSE << "Read prop " << val << " at " << +i;
                 if (val > lo_hi_threshold_ & pos_i == std::numeric_limits<uint8_t>::max()){
                     pos_i = i;
                 } else if (val > lo_hi_threshold_ ){
@@ -204,10 +204,10 @@ class StatsModel
             }
             if (pos_i == std::numeric_limits<uint8_t>::max())
                 add_to_training = false;
-            PLOG_DEBUG << "add_to_training is " << add_to_training << " with hi pos " << +pos_i;
+            PLOG_VERBOSE << "add_to_training is " << add_to_training << " with hi pos " << +pos_i;
 
             if (add_to_training) {
-                PLOG_DEBUG << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
+                PLOG_VERBOSE << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
                 auto ready_to_train = training_data_.at(pos_i).add_pos(read_proportions[pos_i]);
                 if (ready_to_train)
                     train_model_at(pos_i);
