@@ -53,6 +53,7 @@ class TrainingData
                 if (neg_complete)
                     complete = true;
             }
+            PLOG_VERBOSE << "Add to pos results in pos size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 
@@ -64,6 +65,7 @@ class TrainingData
                 if (pos_complete)
                     complete = true;
             }
+            PLOG_VERBOSE << "Add to neg results in size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 
@@ -178,7 +180,7 @@ class StatsModel
             training_data_.resize(0);
         }
 
-        void train_model_at(const uint8_t & i)
+        void (const uint8_t & i)
         {
             PLOG_DEBUG << "Train model at position " << +i;
             const auto & data = training_data_[i];
