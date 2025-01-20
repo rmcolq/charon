@@ -58,6 +58,7 @@ class TrainingData
 
         bool add_pos(const float& val){
             if (pos.size() < num_reads_to_fit){
+#pragma omp critical
                 pos.push_back(val);
             } else {
                 check_status();
@@ -68,6 +69,7 @@ class TrainingData
 
         bool add_neg(const float& val){
             if (neg.size() < num_reads_to_fit and val > 0){
+#pragma omp critical
                 neg.push_back(val);
             } else {
                 check_status();
@@ -183,8 +185,11 @@ class StatsModel
                     return;
             }
             ready_ = true;
-            training_data_.clear();
-            training_data_.resize(0);
+#pragma omp critical
+            {
+                training_data_.clear();
+                training_data_.resize(0);
+            }
         }
 
     void train_model_at(const uint8_t & i)
@@ -195,6 +200,7 @@ class StatsModel
 
             auto & model = models_[i];
             assert(not model.ready);
+#pragma omp critical
             model.train(data);
             check_if_ready();
         }
