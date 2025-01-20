@@ -93,11 +93,10 @@ class Result
             PLOG_VERBOSE << "Post-process read " << read_id;
             entries.at(read_id).post_process(summary_);
             if (stats_model.ready()) {
-                PLOG_VERBOSE << "Classify read " << read_id;
-                entries.at(read_id).classify(stats_model);
+                classify_read(read_id);
             } else {
                 PLOG_VERBOSE << "Add read to training " << read_id;
-#pragma omp critical
+#pragma omp critical(add_to_cache)
                 {
                     cached_read_ids.push_back(read_id);
                     const auto training_complete = stats_model.add_read_to_training_data(entries.at(read_id).unique_props());
