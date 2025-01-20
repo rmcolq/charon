@@ -45,13 +45,22 @@ class TrainingData
             neg.reserve(opt.num_reads_to_fit);
         };
 
+        bool check_status()
+        {
+            if (pos.size() >= num_reads_to_fit)
+                pos_complete = true;
+            if (neg.size() >= num_reads_to_fit)
+                neg_complete = true;
+            if (pos_complete and neg_complete)
+                complete = true;
+            return complete;
+        }
+
         bool add_pos(const float& val){
             if (pos.size() < num_reads_to_fit){
                 pos.push_back(val);
             } else {
-                pos_complete = true;
-                if (neg_complete)
-                    complete = true;
+                check_status();
             }
             PLOG_VERBOSE << "Add to pos results in pos size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
@@ -61,11 +70,9 @@ class TrainingData
             if (neg.size() < num_reads_to_fit and val > 0){
                 neg.push_back(val);
             } else {
-                neg_complete = true;
-                if (pos_complete)
-                    complete = true;
+                check_status();
             }
-            PLOG_VERBOSE << "Add to neg results in size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
+            PLOG_VERBOSE << "Add to neg results in neg size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 
@@ -180,7 +187,7 @@ class StatsModel
             training_data_.resize(0);
         }
 
-        void train_model_at(const uint8_t & i)
+    void train_model_at(const uint8_t & i)
         {
             PLOG_DEBUG << "Train model at position " << +i;
             const auto & data = training_data_[i];
@@ -212,13 +219,20 @@ class StatsModel
             if (add_to_training) {
                 PLOG_VERBOSE << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
                 auto ready_to_train = training_data_.at(pos_i).add_pos(read_proportions[pos_i]);
-                if (ready_to_train)
+                if (ready_to_train){
+#pragma omp task
                     train_model_at(pos_i);
+#pragma omp taskwait
+                }
+
                 for (uint8_t i=0; i < read_proportions.size(); ++i) {
                     if (i != pos_i){
                         ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
-                        if (ready_to_train)
-                            train_model_at(pos_i);
+                        if (ready_to_train) {
+#pragma omp task
+                            train_model_at(i);
+#pragma omp taskwait
+                        }
                     }
                 }
             }
