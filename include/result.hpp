@@ -57,7 +57,7 @@ class Result
                 PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
                 entries[read_id] = ReadEntry(read_id, length, summary_);
             }
-            PLOG_VERBOSE << "Update entry ";
+            //PLOG_VERBOSE << "Update entry ";
             entries.at(read_id).update_entry(entry);
         };
 

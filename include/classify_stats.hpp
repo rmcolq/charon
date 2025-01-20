@@ -180,6 +180,7 @@ class StatsModel
 
         void train_model_at(const uint8_t & i)
         {
+            PLOG_DEBUG << "Train model at position " << +i;
             const auto & data = training_data_[i];
             assert(data.complete and data.pos_complete and data.neg_complete);
 

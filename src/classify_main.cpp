@@ -146,7 +146,7 @@ int classify_main(ClassifyArguments & opt)
     } else if (opt.verbosity > 1) {
         log_level = plog::verbose;
     }
-    plog::init(log_level, opt.log_file.c_str(), 1000000, 5);
+    plog::init(log_level, opt.log_file.c_str(), 10000000, 5);
 
     if (!ends_with(opt.db, ".idx")) {
         opt.db += ".idx";
