@@ -57,15 +57,21 @@ class Result
             if (entries.find(read_id) == entries.end()){
                 PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
 #pragma omp critical(add_read_id_to_entries)
-                entries[read_id] = ReadEntry(read_id, length, summary_);
+                entries.emplace(read_id,ReadEntry(read_id, length, summary_));
             }
             //PLOG_VERBOSE << "Update entry ";
+            if (entries.find(read_id) == entries.end())
+            {
+                PLOG_WARNING << "KEY MISSING" << read_id << " with entries size " << entries.size();
+            }
             entries.at(read_id).update_entry(entry);
         };
 
         void classify_read(const std::string & read_id)
         {
+            PLOG_VERBOSE << "Classify " << read_id;
             entries.at(read_id).classify(stats_model);
+            PLOG_VERBOSE << "Print " << read_id;
             entries.at(read_id).print_assignment_result(summary_);
         }
 

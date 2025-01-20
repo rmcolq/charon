@@ -49,6 +49,7 @@ public:
             unique_props_.emplace_back(0);
             probabilities_.emplace_back(1);
         }
+        PLOG_VERBOSE << "Initializing complete for read_id " << read_id;
     }
 
     std::vector<float> unique_props() const {
