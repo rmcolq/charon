@@ -58,7 +58,7 @@ class TrainingData
 
         bool add_pos(const float& val){
             if (pos.size() < num_reads_to_fit){
-#pragma omp critical
+#pragma omp critical pos_push
                 pos.push_back(val);
             } else {
                 check_status();
@@ -69,7 +69,7 @@ class TrainingData
 
         bool add_neg(const float& val){
             if (neg.size() < num_reads_to_fit and val > 0){
-#pragma omp critical
+#pragma omp critical neg_push
                 neg.push_back(val);
             } else {
                 check_status();
@@ -185,7 +185,7 @@ class StatsModel
                     return;
             }
             ready_ = true;
-#pragma omp critical
+#pragma omp critical train_clear
             {
                 training_data_.clear();
                 training_data_.resize(0);
@@ -200,7 +200,7 @@ class StatsModel
 
             auto & model = models_[i];
             assert(not model.ready);
-#pragma omp critical
+#pragma omp critical train
             model.train(data);
             check_if_ready();
         }
@@ -226,7 +226,7 @@ class StatsModel
                 PLOG_VERBOSE << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
                 auto ready_to_train = training_data_.at(pos_i).add_pos(read_proportions[pos_i]);
                 if (ready_to_train){
-#pragma omp critical
+#pragma omp critical train_model
                     train_model_at(pos_i);
                 }
 
@@ -234,7 +234,7 @@ class StatsModel
                     if (i != pos_i){
                         ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
                         if (ready_to_train) {
-#pragma omp critical
+#pragma omp critical train_model
                             train_model_at(i);
                         }
                     }
