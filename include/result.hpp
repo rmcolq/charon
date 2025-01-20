@@ -89,10 +89,13 @@ class Result
                 entries.at(read_id).classify(stats_model);
             } else {
                 PLOG_VERBOSE << "Add read to training " << read_id;
-                cached_read_ids.push_back(read_id);
-                const auto training_complete = stats_model.add_read_to_training_data(entries.at(read_id).unique_props());
-                if (training_complete)
-                    classify_cache();
+#pragma omp critical
+                {
+                    cached_read_ids.push_back(read_id);
+                    const auto training_complete = stats_model.add_read_to_training_data(entries.at(read_id).unique_props());
+                    if (training_complete)
+                        classify_cache();
+                }
             }
         }
 

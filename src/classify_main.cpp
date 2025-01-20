@@ -102,7 +102,6 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
 #pragma omp critical
                 result.update_entry(read_id, read_length, entry);
             }
-#pragma omp critical
             result.post_process_read(read_id);
         }
         records.clear();
