@@ -74,7 +74,7 @@ class TrainingData
             } else {
                 check_status();
             }
-            PLOG_VERBOSE << "Add to neg results in neg size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
+            PLOG_VERBOSE << "Add to neg results in pos size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 

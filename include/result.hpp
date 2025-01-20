@@ -33,7 +33,7 @@ class Result
             summary_{summary}
         {
             stats_model = StatsModel(opt, summary);
-            cached_read_ids.reserve(2000);
+            cached_read_ids.reserve(opt.num_reads_to_fit*summary.num_categories()*2);
         };
 
         uint8_t category_index(const std::string& category)
@@ -55,6 +55,7 @@ class Result
             std::cout << std::endl;*/
             if (entries.find(read_id) == entries.end()){
                 PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
+#pragma omp critical(add_read_id_to_entries)
                 entries[read_id] = ReadEntry(read_id, length, summary_);
             }
             //PLOG_VERBOSE << "Update entry ";
