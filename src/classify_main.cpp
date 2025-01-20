@@ -99,7 +99,6 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
             //auto read_quality = std::max(record.base_qualities());
             for (auto && value : record.sequence() | hash_adaptor) {
                 auto &entry = agent.bulk_contains(value);
-#pragma omp critical(update_entry)
                 result.update_entry(read_id, read_length, entry);
             }
             result.post_process_read(read_id);
