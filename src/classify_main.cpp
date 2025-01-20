@@ -85,7 +85,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
         {
             records.push_back(std::move(record));
         }
-#pragma omp parallel for firstprivate(agent, hash_adaptor)
+#pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads)
         for (auto i=0; i<records.size(); ++i){
 
             auto record = records[i];

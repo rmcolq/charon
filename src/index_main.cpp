@@ -125,7 +125,7 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
 
     const auto max_num_hashes = max_num_hashes_for_fpr(opt);
 
-#pragma omp parallel for
+#pragma omp parallel for num_threads(opt.threads)
     for (const auto pair : summary.filepath_to_bin) {
         const auto& fasta_file = pair.first;
         const auto& bin = pair.second;

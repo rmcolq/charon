@@ -78,6 +78,14 @@ class TrainingData
             return complete;
         };
 
+        void clear()
+        {
+            pos.clear();
+            pos.resize(0);
+            neg.clear();
+            neg.resize(0);
+        }
+
     friend class StatsModel;
     friend class Model;
 };
@@ -126,11 +134,12 @@ class Model
         Model & operator=(Model &&) = default;
         ~Model() = default;
 
-        void train(const TrainingData & training_data)
+        void train(TrainingData & training_data)
         {
             pos.fit(training_data.pos);
             neg.fit(training_data.neg);
             ready = true;
+            training_data.clear();
         }
 
         ProbPair prob(const float & read_proportion) const {
@@ -185,17 +194,12 @@ class StatsModel
                     return;
             }
             ready_ = true;
-#pragma omp critical(train_clear)
-            {
-                training_data_.clear();
-                training_data_.resize(0);
-            }
         }
 
     void train_model_at(const uint8_t & i)
         {
             PLOG_DEBUG << "Train model at position " << +i;
-            const auto & data = training_data_[i];
+            auto & data = training_data_[i];
             assert(data.complete and data.pos_complete and data.neg_complete);
 
             auto & model = models_[i];
@@ -225,7 +229,7 @@ class StatsModel
             if (add_to_training) {
                 PLOG_VERBOSE << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
                 auto ready_to_train = training_data_.at(pos_i).add_pos(read_proportions[pos_i]);
-                if (ready_to_train){
+                if (ready_to_train and not models_[pos_i].ready){
 #pragma omp critical(train_model)
                     train_model_at(pos_i);
                 }
@@ -233,7 +237,7 @@ class StatsModel
                 for (uint8_t i=0; i < read_proportions.size(); ++i) {
                     if (i != pos_i){
                         ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
-                        if (ready_to_train) {
+                        if (ready_to_train and not models_[i].ready) {
 #pragma omp critical(train_model)
                             train_model_at(i);
                         }
