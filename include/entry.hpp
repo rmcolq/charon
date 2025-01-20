@@ -76,7 +76,7 @@ public:
     };
 
     void get_max_bits(const InputSummary &summary) {
-        PLOG_DEBUG << "Get max bits per category";
+        PLOG_DEBUG << "Get max bits per category for read " << read_id_;
         const auto num_categories = max_bits_.size();
         for (auto i = 0; i < num_categories; ++i) {
             max_bits_.at(i).resize(num_hashes_, 0);
@@ -84,14 +84,14 @@ public:
         for (const auto &[bin, bitmap]: bits_) {
             const auto category = summary.bin_to_category.at(bin);
             const auto index = summary.category_index(category);
-            PLOG_VERBOSE << +bin << " belongs to " << category << " with index " << +index;
+            PLOG_VERBOSE << +bin << " belongs to " << category << " with index " << +index << " for read " << read_id_;
 
             auto current_bit_count = std::count(bitmap.begin(), bitmap.end(), true);
             const auto &max_bitmap = max_bits_.at(index);
             auto max_bit_count = std::count(max_bitmap.begin(), max_bitmap.end(), true);
-            PLOG_VERBOSE << current_bit_count << " " << max_bit_count;
+            PLOG_VERBOSE << current_bit_count << " " << max_bit_count << " for read " << read_id_;
             if (current_bit_count > max_bit_count) {
-                PLOG_VERBOSE << "redefine max";
+                PLOG_VERBOSE << "redefine max for read " << read_id_;
                 max_bits_.at(index) = bitmap;
             }
         }
@@ -168,12 +168,12 @@ public:
     }
 
     void classify(const StatsModel &stats_model) {
-        PLOG_DEBUG << "Classify read ";
+        PLOG_DEBUG << "Classify read " << read_id_;;
         for (auto i = 0; i < unique_props_.size(); ++i) {
             const auto &read_proportion = unique_props_.at(i);
             const auto result_pair = stats_model.classify(i, read_proportion);
             PLOG_DEBUG << "Pos " << +i << " has read proportion " << read_proportion << " yielding probs "
-                       << result_pair.pos << " and " << result_pair.neg;
+                       << result_pair.pos << " and " << result_pair.neg << " for read " << read_id_;;
             for (auto j = 0; j < unique_props_.size(); ++j) {
                 if (i == j)
                     probabilities_.at(j) *= result_pair.pos;

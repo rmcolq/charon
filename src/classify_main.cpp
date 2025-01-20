@@ -101,6 +101,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
                 auto &entry = agent.bulk_contains(value);
                 result.update_entry(read_id, read_length, entry);
             }
+            PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
             result.post_process_read(read_id);
         }
         records.clear();
