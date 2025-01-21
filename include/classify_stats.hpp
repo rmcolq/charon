@@ -24,6 +24,7 @@ double mean(const auto & v) {
 class TrainingData
 {
     private:
+        uint8_t id;
         bool complete = false;
         bool pos_complete = false;
         bool neg_complete = false;
@@ -38,7 +39,8 @@ class TrainingData
         TrainingData & operator=(TrainingData &&) = default;
         ~TrainingData() = default;
 
-        TrainingData(const ClassifyArguments & opt)
+        TrainingData(const ClassifyArguments & opt, const uint8_t i):
+            id{i}
         {
             num_reads_to_fit = opt.num_reads_to_fit;
             pos.reserve(opt.num_reads_to_fit);
@@ -123,6 +125,7 @@ struct ProbPair {
 class Model
 {
     private:
+        uint8_t id;
         bool ready {false};
         GammaParams pos{25,0,0.02};
         GammaParams neg{10,0,0.005};
@@ -134,12 +137,17 @@ class Model
         Model & operator=(Model &&) = default;
         ~Model() = default;
 
+        Model(const uint8_t i):
+            id{i}
+        {};
+
         void train(TrainingData & training_data)
         {
+            assert(training_data.id == id);
             pos.fit(training_data.pos);
-            PLOG_INFO << "Model fit pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "<< pos.scale << ")";
+            PLOG_INFO << "Model " << +id << " fit pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "<< pos.scale << ")";
             neg.fit(training_data.neg);
-            PLOG_INFO << "Model fit neg data with Gamma (shape:" << neg.shape <<", loc: 0, scale: "<< neg.scale << ")";
+            PLOG_INFO << "Model " << +id << " fit neg data with Gamma (shape:" << neg.shape <<", loc: 0, scale: "<< neg.scale << ")";
             ready = true;
             training_data.clear();
         }
@@ -176,8 +184,8 @@ class StatsModel
                 lo_hi_threshold_(opt.lo_hi_threshold)
         {
             for (auto i=0; i<summary.num_categories(); ++i){
-                models_.emplace_back(Model());
-                training_data_.emplace_back(TrainingData(opt));
+                models_.emplace_back(Model(i));
+                training_data_.emplace_back(TrainingData(opt, i));
             }
             PLOG_DEBUG << "Initialize stats model with " << training_data_.size() << " sets of training data ";
         };
