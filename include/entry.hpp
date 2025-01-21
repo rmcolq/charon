@@ -69,10 +69,11 @@ public:
         PLOG_DEBUG << "]" ;*/
 
         assert(entry.size() == bits_.size());
+        num_hashes_ += 1;
         for (auto bucket = 0; bucket < entry.size(); ++bucket) {
             bits_.at(bucket).emplace_back(entry[bucket]);
+            assert(bits_.at(bucket).size() == num_hashes_);
         }
-        num_hashes_ += 1;
     };
 
     void get_max_bits(const InputSummary &summary) {
