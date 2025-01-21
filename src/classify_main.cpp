@@ -85,7 +85,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
         {
             records.push_back(std::move(record));
         }
-#pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads)
+#pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
         for (auto i=0; i<records.size(); ++i){
 
             const auto & record = records[i];
@@ -97,9 +97,10 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
                 continue;
             }
             //auto read_quality = std::max(record.base_qualities());
+            result.add_read(read_id, read_length);
             for (auto && value : record.sequence() | hash_adaptor) {
                 const auto & entry = agent.bulk_contains(value);
-                result.update_entry(read_id, read_length, entry);
+                result.update_read(read_id, entry);
             }
             PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
             result.post_process_read(read_id);

@@ -48,22 +48,22 @@ class Result
             return entries.at(read_id).call();
         }
 
-        void update_entry(const std::string read_id, const uint32_t length, const auto & entry){
+        void add_read(const std::string read_id, const uint32_t length){
+            if (entries.find(read_id) == entries.end()){
+                PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
+    #pragma omp critical(add_read_id_to_entries)
+                entries.emplace(read_id,ReadEntry(read_id, length, summary_));
+            }
+            assert (entries.find(read_id) != entries.end());
+        }
+
+        void update_read(const std::string read_id, const auto & entry){
             /*std::cout << read_id << " ";
             for (const auto i : entry){
                 std:: cout << +i;
             }
             std::cout << std::endl;*/
-            if (entries.find(read_id) == entries.end()){
-                PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
-#pragma omp critical(add_read_id_to_entries)
-                entries.emplace(read_id,ReadEntry(read_id, length, summary_));
-            }
-            //PLOG_VERBOSE << "Update entry ";
-            if (entries.find(read_id) == entries.end())
-            {
-                PLOG_WARNING << "KEY MISSING" << read_id << " with entries size " << entries.size();
-            }
+            assert (entries.find(read_id) != entries.end());
             entries.at(read_id).update_entry(entry);
         };
 
