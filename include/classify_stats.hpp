@@ -137,7 +137,9 @@ class Model
         void train(TrainingData & training_data)
         {
             pos.fit(training_data.pos);
+            PLOG_INFO << "Model fit pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "<< pos.scale << ")";
             neg.fit(training_data.neg);
+            PLOG_INFO << "Model fit neg data with Gamma (shape:" << neg.shape <<", loc: 0, scale: "<< neg.scale << ")";
             ready = true;
             training_data.clear();
         }
@@ -205,8 +207,11 @@ class StatsModel
             auto & model = models_[i];
             assert(not model.ready);
 #pragma omp critical(train)
-            model.train(data);
-            check_if_ready();
+            {
+                model.train(data);
+                check_if_ready();
+            }
+
         }
 
         bool add_read_to_training_data(const std::vector<float>& read_proportions){
