@@ -172,8 +172,10 @@ public:
                 second = val;
                 second_pos = i;
                 if (second > first)
+                {
                     std::swap(first, second);
-                std::swap(first_pos, second_pos);
+                    std::swap(first_pos, second_pos);
+                }
             }
         }
         if ((first > 0.9999 or second < 0.0001) and (first > 0.01))
