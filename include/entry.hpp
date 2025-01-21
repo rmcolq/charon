@@ -178,7 +178,7 @@ public:
                 }
             }
         }
-        if ((first > 0.9999 or second < 0.0001) and (first > 0.01))
+        if ((first > 0.9999 or second < 0.0001 or first - second > 0.5) and (first > 0.01))
             call_ = first_pos;
     }
 
