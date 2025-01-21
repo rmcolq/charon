@@ -72,8 +72,10 @@ public:
         num_hashes_ += 1;
         for (auto bucket = 0; bucket < entry.size(); ++bucket) {
             bits_.at(bucket).emplace_back(entry[bucket]);
-            if (bits_.at(bucket).size() != num_hashes_)
-                std::cout << read_id_ << " bucket k=" << +bucket << " out of " << entry.size() << " final bin/hash sizes " << bits_.at(bucket).size() << " and " << num_hashes_ << std::endl;
+            if (bits_.at(bucket).size() != num_hashes_){
+#pragma omp critical
+                PLOG_ERROR << read_id_ << " bucket k=" << +bucket << " out of " << entry.size() << " final bin/hash sizes " << bits_.at(bucket).size() << " and " << num_hashes_;
+            }
             assert(bits_.at(bucket).size() == num_hashes_);
         }
     };
