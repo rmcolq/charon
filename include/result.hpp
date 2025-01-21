@@ -72,6 +72,7 @@ class Result
             PLOG_VERBOSE << "Classify " << read_id;
             entries.at(read_id).classify(stats_model);
             PLOG_VERBOSE << "Print " << read_id;
+#pragma omp critical
             entries.at(read_id).print_assignment_result(summary_);
         }
 
