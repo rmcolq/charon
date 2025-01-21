@@ -73,7 +73,7 @@ public:
         for (auto bucket = 0; bucket < entry.size(); ++bucket) {
             bits_.at(bucket).emplace_back(entry[bucket]);
             if (bits_.at(bucket).size() != num_hashes_)
-                std::cout << read_id_ << " bucket k=" << bucket << " out of " < entry.size() << " final bin/hash sizes " << bits_.at(bucket).size() << " and " << num_hashes_ << std::endl;
+                std::cout << read_id_ << " bucket k=" << +bucket << " out of " << entry.size() << " final bin/hash sizes " << bits_.at(bucket).size() << " and " << num_hashes_ << std::endl;
             assert(bits_.at(bucket).size() == num_hashes_);
         }
     };
