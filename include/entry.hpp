@@ -72,6 +72,8 @@ public:
         for (auto i = 0; i < entry.size(); ++i) {
             const auto row = entry[i];
             //PLOG_DEBUG << "row " << i << " " << row;
+            if (i > bits_.size())
+                PLOG_ERROR << "i > bits_.size()";
             bits_.at(i).push_back(row);
         }
     };
@@ -80,6 +82,8 @@ public:
         PLOG_DEBUG << "Get max bits per category for read " << read_id_;
         const auto num_categories = max_bits_.size();
         for (auto i = 0; i < num_categories; ++i) {
+            if (i > max_bits_.size())
+                PLOG_ERROR << "i > max_bits_.size()";
             max_bits_.at(i).resize(num_hashes_, 0);
         }
         for (const auto &[bin, bitmap]: bits_) {
@@ -88,6 +92,8 @@ public:
             PLOG_VERBOSE << +bin << " belongs to " << category << " with index " << +index << " for read " << read_id_;
 
             auto current_bit_count = std::count(bitmap.begin(), bitmap.end(), true);
+            if (index > max_bits_.size())
+                PLOG_ERROR << "index > max_bits_.size()";
             const auto &max_bitmap = max_bits_.at(index);
             auto max_bit_count = std::count(max_bitmap.begin(), max_bitmap.end(), true);
             PLOG_VERBOSE << current_bit_count << " " << max_bit_count << " for read " << read_id_;
@@ -103,9 +109,13 @@ public:
         const auto num_categories = max_bits_.size();
         for (auto i = 0; i < num_categories; ++i) {
             for (auto j = 0; j <= i; ++j) {
+                if (i > max_bits_.size() or j > max_bits_.size())
+                    PLOG_ERROR << "i  or j > bits_.size()";
                 const auto row = max_bits_.at(i);
                 const auto col = max_bits_.at(j);
                 for (auto k = 0; k < num_hashes_; ++k) {
+                    if (k > row.size() or k > k > col.size())
+                        PLOG_ERROR << "k > row or col.size()";
                     //PLOG_DEBUG << "(" << i << "," << j << ")" << k << row.size() << col.size();
                     if (row.at(k) and col.at(k)) {
                         counts_(i, j) += 1;
@@ -127,6 +137,8 @@ public:
             found.clear();
             for (auto i = 0; i < num_categories; ++i) {
                 const auto row = max_bits_.at(i);
+                if (k > row.size())
+                    PLOG_ERROR << "k > row.size()";
                 if (row.at(k)) {
                     found.push_back(i);
                 }
