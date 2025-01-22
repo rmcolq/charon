@@ -37,6 +37,11 @@ class Result
             cached_read_ids.reserve(opt.num_reads_to_fit*summary.num_categories()*2);
         };
 
+        void check_entries_size( const uint8_t chunk_size)
+        {
+            entries.reserve(entries.size() + 2*chunk_size );
+        }
+
         uint8_t category_index(const std::string& category)
         {
             return summary_.category_index(category);

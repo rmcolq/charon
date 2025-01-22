@@ -85,6 +85,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
         {
             records.push_back(std::move(record));
         }
+        result.check_entries_size(opt.chunk_size);
 #pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
         for (auto i=0; i<records.size(); ++i){
 
