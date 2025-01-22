@@ -144,10 +144,21 @@ class Model
         void train(TrainingData & training_data)
         {
             assert(training_data.id == id);
-            pos.fit(training_data.pos);
-            PLOG_INFO << "Model " << +id << " fit pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "<< pos.scale << ")";
-            neg.fit(training_data.neg);
-            PLOG_INFO << "Model " << +id << " fit neg data with Gamma (shape:" << neg.shape <<", loc: 0, scale: "<< neg.scale << ")";
+            if (training_data.pos_complete ) {
+                pos.fit(training_data.pos);
+                PLOG_INFO << "Model " << +id << " fit pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "
+                          << pos.scale << ")";
+            } else {
+                PLOG_INFO << "Model " << +id << " using default for pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "<< pos.scale << ")";
+            }
+
+            if (training_data.neg_complete ) {
+                neg.fit(training_data.neg);
+                PLOG_INFO << "Model " << +id << " fit neg data with Gamma (shape:" << neg.shape << ", loc: 0, scale: "
+                          << neg.scale << ")";
+            } else {
+                PLOG_INFO << "Model " << +id << " using default for neg data with Gamma (shape:" << neg.shape <<", loc: 0, scale: "<< neg.scale << ")";
+            }
             ready = true;
             training_data.clear();
         }
@@ -197,6 +208,19 @@ class StatsModel
             return ready_;
         }
 
+        void force_ready()
+        {
+            for (auto i=0; i < models_.size(); ++i){
+                auto & model = models_[i];
+                if (model.ready)
+                    continue;
+                auto & data = training_data_[i];
+#pragma omp critical(train)
+                model.train(data);
+            }
+            ready_ = true;
+        }
+
         void check_if_ready()
         {
             if (ready_)
@@ -226,7 +250,6 @@ class StatsModel
                 model.train(data);
                 check_if_ready();
             }
-
         }
 
         bool add_read_to_training_data(const std::vector<float>& read_proportions){

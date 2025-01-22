@@ -99,8 +99,16 @@ class Result
                 PLOG_VERBOSE << "Add read to training " << read_id;
 #pragma omp critical(add_to_cache)
                 {
-                    cached_read_ids.push_back(read_id);
-                    const auto training_complete = stats_model.add_read_to_training_data(entries.at(read_id).unique_props());
+                    bool training_complete = false;
+                    if (cached_read_ids.size() < cached_read_ids.capacity())
+                    {
+                        cached_read_ids.push_back(read_id);
+                        training_complete = stats_model.add_read_to_training_data(entries.at(read_id).unique_props());
+                    } else {
+                        stats_model.force_ready();
+                        training_complete = true;
+                    }
+
                     if (training_complete)
                         classify_cache();
                 }
