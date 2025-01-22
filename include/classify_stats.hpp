@@ -224,19 +224,23 @@ class StatsModel
 
         bool add_read_to_training_data(const std::vector<float>& read_proportions){
             auto pos_i = std::numeric_limits<uint8_t>::max();
-            bool add_to_training = true;
+            auto max_val = 0.0;
+            auto num_above_threshold = 0;
             PLOG_VERBOSE << "Decide if read is training candidate";
             for (uint8_t i=0; i < read_proportions.size(); ++i) {
                 const auto & val = read_proportions.at(i);
                 PLOG_VERBOSE << "Read prop " << val << " at " << +i;
-                if (val > lo_hi_threshold_ & pos_i == std::numeric_limits<uint8_t>::max()){
+                if (val > lo_hi_threshold_)
+                    num_above_threshold += 1;
+                if (val == max_val)
+                    pos_i = std::numeric_limits<uint8_t>::max();
+                else if (val > max_val)
+                {
                     pos_i = i;
-                } else if (val > lo_hi_threshold_ ){
-                    add_to_training = false;
+                    max_val = val;
                 }
             }
-            if (pos_i == std::numeric_limits<uint8_t>::max())
-                add_to_training = false;
+            bool add_to_training = (pos_i != std::numeric_limits<uint8_t>::max() and num_above_threshold <= 1);
             PLOG_VERBOSE << "add_to_training is " << add_to_training << " with hi pos " << +pos_i;
 
             if (add_to_training) {
