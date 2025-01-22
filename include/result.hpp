@@ -34,7 +34,7 @@ class Result
         {
             stats_model = StatsModel(opt, summary);
             entries.reserve(250000);
-            cached_read_ids.reserve(opt.num_reads_to_fit*summary.num_categories()*2);
+            cached_read_ids.reserve(opt.num_reads_to_fit*summary.num_categories()*4);
         };
 
         void check_entries_size( const uint8_t chunk_size)
