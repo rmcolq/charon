@@ -80,3 +80,35 @@ cd build
 cmake -DCMAKE_BUILD_TYPE=Release ..
 make
 ```
+
+## Usage 
+
+### Classify
+```
+Classify read file using index.
+Usage: bin/charon classify [OPTIONS] <fastaq>
+
+Positionals:
+<fastaq> FILE [required]    Fasta/q file
+
+Options:
+-h,--help                   Print this help message and exit
+--chunk_size INT            Read file is read in chunks of this size, to be processed in parallel within a chunk. [default: d]
+-t,--threads INT            Maximum number of threads to use. [default: ]
+--db FILE [required]        Prefix for the index.
+-e,--extract STRING         Reads from this category in the index will be extracted to file.
+--extract_file FILE         Fasta/q file for output
+--log FILE                  File for log
+-v                          Verbosity of logging. Repeat for increased verbosity
+```
+Outputs:
+STDOUT a tab separated file with the following fields
+1. `[U,C]` unclassified or classified
+2. `read_id`
+3. `call` which of the index catagories it has been called as ("" if no call)
+4. `length` number of hashed kmers in the read
+5. `confidence_score` the defined as log10(highest_prob/second_highest_prob). If you want the winning probability to take the call, set this to 0. For cautious use set this between 10-20. 
+6. `details` a space separated breakdown. For each category, lists `category_name:count_hits:proportion_of_hits_unique_to_category:assigned_probability`. Here the probability score is 
+the probability of seeing this combination of unique_proportions if the read comes from this category.
+
+If `extract_file` and `--extract` specified, will output a file with a subset of input reads. 

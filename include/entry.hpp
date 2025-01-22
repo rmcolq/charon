@@ -242,7 +242,7 @@ public:
             std::cout << "U" << "\t";
         else
             std::cout << "C" << "\t";
-        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << num_hashes_ << "\t";
+        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << num_hashes_ << "\t" << +confidence_score_ << "\t" ;
         std::cout.precision(6);
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_(i, i) << ":" << unique_props_.at(i) << ":"
