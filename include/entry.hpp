@@ -23,6 +23,7 @@ private:
     std::vector<float> unique_props_; // this collects over categories the proportion of all hashes which were unique to the given category
     std::vector<double> probabilities_; // this collects over categories the probability of this read given the data come from that category
     uint8_t call_ = std::numeric_limits<uint8_t>::max();
+    int8_t confidence_score_ = std::numeric_limits<int8_t>::max();
 public:
     ReadEntry() = default;
 
@@ -58,6 +59,10 @@ public:
 
     uint8_t call() const {
         return call_;
+    }
+
+    uint8_t confidence_score() const {
+        return confidence_score_;
     }
 
     void update_entry(const auto &entry) {
@@ -158,14 +163,14 @@ public:
         get_unique_props();
     }
 
-    void call_category() {
-        float first = 0;
+    void call_category(int8_t confidence_threshold) {
+        double first = 0;
         uint8_t first_pos = 0;
-        float second = 0;
+        double second = 0;
         uint8_t second_pos = 0;
 
         for (auto i = 0; i < probabilities_.size(); ++i) {
-            const float &val = probabilities_.at(i);
+            const double &val = probabilities_.at(i);
             if (val > second) {
                 second = val;
                 second_pos = i;
@@ -176,8 +181,14 @@ public:
                 }
             }
         }
-        if (first > 0.9999 or (second < 0.0001 and first > 0.01)) //second == 0 or first / second > 100)
+        if (second == 0 and first > 0)
             call_ = first_pos;
+        else
+        {
+            confidence_score_ = static_cast<int8_t>(std::log10(first/second));
+            if (confidence_score_ > confidence_threshold)
+                call_ = first_pos;
+        }
     }
 
     void classify(const StatsModel &stats_model) {
@@ -194,11 +205,11 @@ public:
                     probabilities_.at(j) *= result_pair.neg;
             }
         }
-        call_category();
+        call_category(stats_model.confidence_threshold());
     }
 
     void print_result(const InputSummary &summary) {
-        std::cout << read_id_ << "\t" << num_hashes_ << "\t" << summary.category_name(call_) << "\t";
+        std::cout << read_id_ << "\t" << num_hashes_ << "\t" << summary.category_name(call_) << "\t" << +confidence_score_ << "\t" ;
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_(i, i) << ":" << probabilities_.at(i) << "\t";
         }

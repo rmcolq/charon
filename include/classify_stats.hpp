@@ -169,6 +169,7 @@ class StatsModel
     private:
         bool ready_ {false};
         float lo_hi_threshold_;
+        int8_t confidence_threshold_;
         std::vector<TrainingData> training_data_;
         std::vector<Model> models_;
 
@@ -181,7 +182,8 @@ class StatsModel
         ~StatsModel() = default;
 
         StatsModel(const ClassifyArguments& opt, const InputSummary & summary):
-                lo_hi_threshold_(opt.lo_hi_threshold)
+                lo_hi_threshold_(opt.lo_hi_threshold),
+                confidence_threshold_(opt.confidence_threshold)
         {
             for (auto i=0; i<summary.num_categories(); ++i){
                 models_.emplace_back(Model(i));
@@ -190,7 +192,7 @@ class StatsModel
             PLOG_DEBUG << "Initialize stats model with " << training_data_.size() << " sets of training data ";
         };
 
-        bool ready()
+        bool ready() const
         {
             return ready_;
         }
@@ -204,6 +206,11 @@ class StatsModel
                     return;
             }
             ready_ = true;
+        }
+
+        int8_t confidence_threshold() const
+        {
+            return confidence_threshold_;
         }
 
     void train_model_at(const uint8_t & i)
