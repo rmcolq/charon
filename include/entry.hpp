@@ -183,7 +183,7 @@ public:
         double first = 0;
         uint8_t first_pos = 0;
         double second = 0;
-        uint8_t second_pos = 0;
+        uint8_t second_pos = 1;
 
         for (auto i = 0; i < probabilities_.size(); ++i) {
             const double &val = probabilities_.at(i);
