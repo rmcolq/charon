@@ -39,7 +39,7 @@ class Result
 
         void check_entries_size( const uint8_t chunk_size)
         {
-            entries.reserve(entries.size() + 2*chunk_size );
+            entries.reserve(entries.size() + 3*chunk_size );
         }
 
         uint8_t category_index(const std::string& category)
@@ -108,7 +108,7 @@ class Result
                     if (cached_read_ids.size() < cached_read_ids.capacity())
                     {
                         cached_read_ids.push_back(read_id);
-                        training_complete = stats_model.add_read_to_training_data(entries.at(read_id).unique_props());
+                        training_complete = stats_model.add_read_to_training_data(entries.at(read_id).props());
                     } else {
                         stats_model.force_ready();
                         training_complete = true;
