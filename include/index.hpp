@@ -1,5 +1,5 @@
-#ifndef SIFTER_INDEX_H
-#define SIFTER_INDEX_H
+#ifndef CHARON_INDEX_H
+#define CHARON_INDEX_H
 
 #pragma once
 
@@ -7,10 +7,13 @@
 #include <string>
 
 #include <cereal/types/string.hpp>
+#include <cereal/types/unordered_map.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 #include <plog/Log.h>
 
 #include <index_main.hpp>
+#include <input_summary.hpp>
+#include <input_stats.hpp>
 
 
 class Index
@@ -18,10 +21,9 @@ class Index
     private:
         uint8_t window_size_{};
         uint8_t kmer_size_{};
-        uint8_t num_bins_{};
         double max_fpr_{};
         InputSummary summary_{};
-        std::unordered_map<uint8_t, std::string> bin_to_name_{};
+        InputStats stats_{};
         seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> ibf_{};
 
     public:
@@ -34,14 +36,13 @@ class Index
         Index & operator=(Index &&) = default;
         ~Index() = default;
 
-        Index(const IndexArguments & arguments, const InputSummary & summary, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
-            window_size_{arguments.window_size},
-            kmer_size_{arguments.kmer_size},
-            num_bins_{arguments.bins},
-            max_fpr_{arguments.max_fpr},
-            summary_{summary},
-            //bin_to_name_{input.bin_to_name},
-            ibf_(ibf)
+        Index(const IndexArguments & arguments, const InputSummary & summary, const InputStats & stats, const seqan3::interleaved_bloom_filter<seqan3::uncompressed>& ibf):
+                window_size_{arguments.window_size},
+                kmer_size_{arguments.kmer_size},
+                max_fpr_{arguments.max_fpr},
+                summary_{summary},
+                stats_{stats},
+                ibf_(ibf)
         {}
 
         uint8_t window_size() const
@@ -56,7 +57,17 @@ class Index
 
         uint8_t num_bins() const
         {
-            return num_bins_;
+            return summary_.num_bins;
+        }
+
+        uint8_t num_categories() const
+        {
+            return summary_.num_categories();
+        }
+
+        std::vector<std::string> categories() const
+        {
+            return summary_.categories;
         }
 
         double max_fpr() const
@@ -64,22 +75,22 @@ class Index
             return max_fpr_;
         }
 
+        InputStats stats() const
+        {
+            return stats_;
+        }
+
         InputSummary summary() const
         {
             return summary_;
         }
 
-        std::unordered_map<uint8_t, std::string> bin_to_name() const
+        std::unordered_map<uint8_t, std::string> bin_to_category() const
         {
-            return bin_to_name_;
+            return summary_.bin_to_category;
         }
 
-        /*seqan3::interleaved_bloom_filter<> & ibf()
-        {
-            return ibf_;
-        }*/
-
-        seqan3::interleaved_bloom_filter<> const & ibf() const
+        seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> const & ibf() const
         {
             return ibf_;
         }
@@ -104,10 +115,9 @@ class Index
                 {
                     archive(window_size_);
                     archive(kmer_size_);
-                    archive(num_bins_);
                     archive(max_fpr_);
-                    //archive(summary_);
-                    //archive(bin_to_name_);
+                    archive(summary_);
+                    archive(stats_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START
@@ -133,10 +143,9 @@ class Index
                 {
                     archive(window_size_);
                     archive(kmer_size_);
-                    archive(num_bins_);
                     archive(max_fpr_);
-                    //archive(summary_);
-                    //archive(bin_to_name_);
+                    archive(summary_);
+                    archive(stats_);
                     archive(ibf_);
                 }
                     // GCOVR_EXCL_START
@@ -149,4 +158,4 @@ class Index
         //!\endcond
     };
 
-#endif // SIFTER_INDEX_H
+#endif // CHARON_INDEX_H

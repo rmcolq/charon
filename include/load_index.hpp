@@ -1,5 +1,5 @@
-#ifndef SIFTER_LOAD_INDEX_H
-#define SIFTER_LOAD_INDEX_H
+#ifndef CHARON_LOAD_INDEX_H
+#define CHARON_LOAD_INDEX_H
 
 #pragma once
 
@@ -16,7 +16,7 @@ void load_index(Index & index, std::filesystem::path const & path)
     cereal::BinaryInputArchive iarchive{is};
     iarchive(index);
     PLOG_INFO << "Index loaded";
-    PLOG_DEBUG << "Index has " << index.ibf().bin_count() << " bins and " << index.ibf().bit_size() << " bits";
+    //PLOG_DEBUG << "Index has " << index.ibf().bin_count() << " bins and " << index.ibf().bit_size() << " bits";
 }
 
-#endif // SIFTER_LOAD_INDEX_MAIN_H
+#endif // CHARON_LOAD_INDEX_MAIN_H

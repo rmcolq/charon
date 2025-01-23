@@ -1,6 +1,7 @@
 #include <unordered_map>
 #include <unordered_set>
 #include <iostream>
+#include <algorithm>
 
 #include "classify_main.hpp"
 #include "index.hpp"
@@ -11,6 +12,8 @@
 #include <plog/Initializers/RollingFileInitializer.h>
 #include <seqan3/search/views/minimiser_hash.hpp>
 #include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/io/sequence_file/output.hpp>
+#include <seqan3/io/sequence_file/record.hpp>
 #include <seqan3/utility/views/enforce_random_access.hpp>
 #include <seqan3/alphabet/quality/phred_base.hpp>
 #include <seqan3/utility/range/concept.hpp>
@@ -40,7 +43,16 @@ void setup_classify_subcommand(CLI::App& app)
 
     classify_subcommand->add_option("--db", opt->db, "Prefix for the index.")
         ->type_name("FILE")
+        ->required()
         ->check(CLI::ExistingPath.description(""));
+
+    classify_subcommand->add_option("-e,--extract", opt->category_to_extract, "Reads from this category in the index will be extracted to file.")
+            ->type_name("STRING");
+
+    classify_subcommand->add_option("--extract_file", opt->extract_file, "Fasta/q file for output")
+            ->transform(make_absolute)
+            ->check(CLI::NonexistentPath.description(""))
+            ->type_name("FILE");
 
     classify_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
@@ -53,16 +65,14 @@ void setup_classify_subcommand(CLI::App& app)
     classify_subcommand->callback([opt]() { classify_main(*opt); });
 }
 
-Result classify_reads(const Index& index, const ClassifyArguments& opt){
+void classify_reads(const ClassifyArguments& opt, const Index& index, Result& result){
     PLOG_INFO << "Classifying file " << opt.read_file;
-    auto result = Result(index.num_bins());
-    PLOG_DEBUG << "Defined Result";
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
-    PLOG_DEBUG << "Defined hash_adaptor";
+    PLOG_VERBOSE << "Defined hash_adaptor";
 
     auto agent = index.agent();
-    PLOG_DEBUG << "Defined agent";
+    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<my_traits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
@@ -75,25 +85,62 @@ Result classify_reads(const Index& index, const ClassifyArguments& opt){
         {
             records.push_back(std::move(record));
         }
-#pragma omp parallel for firstprivate(agent, hash_adaptor)
+
+#pragma omp master
+        result.check_entries_size(opt.chunk_size);
+#pragma omp barrier
+
+#pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
         for (auto i=0; i<records.size(); ++i){
 
-            auto record = records[i];
+            const auto & record = records[i];
             //PLOG_INFO << "Processing read " << record.id();
-            auto read_id = split(record.id(), " ")[0];
-            auto read_length = record.sequence().size();
-            for (auto && value : record.sequence() | hash_adaptor) {
-                auto &entry = agent.bulk_contains(value);
-#pragma omp critical
-                result.update_entry(read_id, read_length, entry);
+            const auto read_id = split(record.id(), " ")[0];
+            const auto read_length = record.sequence().size();
+            if (read_length > std::numeric_limits<uint32_t>::max()){
+                PLOG_INFO << "Ignoring read " << record.id() << " as too long!";
+                continue;
             }
-#pragma omp critical
-            result.print_result(read_id);
+            //auto read_quality = std::max(record.base_qualities());
+            result.add_read(read_id, read_length);
+            for (auto && value : record.sequence() | hash_adaptor) {
+                const auto & entry = agent.bulk_contains(value);
+                result.update_read(read_id, entry);
+            }
+            PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
+            result.post_process_read(read_id);
         }
         records.clear();
     }
-    PLOG_INFO << "Read all reads";
-    return result;
+    result.complete();
+    result.print_summary();
+}
+
+void extract(const ClassifyArguments& opt, Result& result)
+{
+    LOG_INFO << "Extracting reads matching category " << opt.category_to_extract;
+    const auto category = result.category_index(opt.category_to_extract);
+    LOG_DEBUG << "Corresponds to index " << +category;
+
+    seqan3::sequence_file_input<my_traits> fin{opt.read_file};
+    seqan3::sequence_file_output fout{opt.extract_file};
+
+    // std::views::filter takes a function object (a lambda in this case) as input that returns a boolean
+    auto call_matches_category_filter = std::views::filter(
+        [&category, &result](auto const & record)
+        {
+            auto read_id = split(record.id(), " ")[0];;
+            return result.call(read_id) == category;
+        });
+
+    auto total = 0;
+    for (auto & record : fin | call_matches_category_filter)
+    {
+        fout.push_back(record);
+        total += 1;
+    }
+
+    LOG_INFO << "Wrote " << total << " reads to file " << opt.extract_file.c_str() ;
 }
 
 
@@ -105,18 +152,37 @@ int classify_main(ClassifyArguments & opt)
     } else if (opt.verbosity > 1) {
         log_level = plog::verbose;
     }
-    plog::init(log_level, opt.log_file.c_str(), 1000000, 5);
+    plog::init(log_level, opt.log_file.c_str(), 10000000, 5);
 
     if (!ends_with(opt.db, ".idx")) {
         opt.db += ".idx";
     }
 
-    LOG_INFO << "Running sifter classify";
+    LOG_INFO << "Running charon classify";
 
     auto index = Index();
     load_index(index, opt.db);
 
-    auto result = classify_reads(index, opt);
+    bool run_extract = (opt.category_to_extract != "");
+    const auto categories = index.categories();
+    if (run_extract and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
+    {
+        std::string options = "";
+        for (auto i: categories)
+            options += i + " ";
+        PLOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ " << options << "]";
+        return 1;
+    } else if (run_extract and opt.extract_file == ""){
+        opt.extract_file = opt.read_file + ".extracted.fq";
+    }
+
+    auto result = Result(opt, index.summary());
+    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
+
+    classify_reads(opt, index, result);
+
+    if (run_extract)
+        extract(opt, result);
 
     return 0;
 }
