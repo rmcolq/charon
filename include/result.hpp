@@ -54,20 +54,17 @@ class Result
         }
 
         void add_read(const std::string read_id, const uint32_t length){
-            if (entries.find(read_id) == entries.end()){
-                PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
+            assert (entries.find(read_id) == entries.end());
+            PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
     #pragma omp critical(add_read_id_to_entries)
+            {
                 entries.emplace(read_id,ReadEntry(read_id, length, summary_));
             }
             assert (entries.find(read_id) != entries.end());
+            return;
         }
 
         void update_read(const std::string read_id, const auto & entry){
-            /*std::cout << read_id << " ";
-            for (const auto i : entry){
-                std:: cout << +i;
-            }
-            std::cout << std::endl;*/
             assert (entries.find(read_id) != entries.end());
             entries.at(read_id).update_entry(entry);
         };
