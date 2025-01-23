@@ -15,7 +15,7 @@ struct ClassifyArguments {
     // Stats options
     float lo_hi_threshold {0.2};
     uint16_t num_reads_to_fit {2000};
-    uint8_t confidence_threshold{10};
+    uint8_t confidence_threshold{7};
     uint8_t min_hits{5};
 
     // Output options
@@ -41,7 +41,7 @@ struct ClassifyArguments {
         ss += "\tmin_hits:\t\t" + std::to_string(min_hits) + "\n\n";
 
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
-        ss += "\textract_file:\t" + extract_file + "\n\n";
+        ss += "\textract_file:\t\t" + extract_file + "\n\n";
 
         ss += "\tlog_file:\t\t" + log_file + "\n";
         ss += "\tthreads:\t\t" + std::to_string(threads) + "\n";
