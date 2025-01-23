@@ -10,6 +10,7 @@
 #include "index.hpp"
 #include "store_index.hpp"
 #include "input_summary.hpp"
+#include "version.h"
 
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
@@ -72,7 +73,6 @@ void setup_index_subcommand(CLI::App& app)
 
 
 InputSummary parse_input_file(const std::filesystem::path& input_file){
-    std::cout << "Parsing input file " << std::endl;
     PLOG_INFO << "Parsing input file " << input_file;
     InputSummary summary;
     uint8_t next_bin = 0;
@@ -110,7 +110,6 @@ InputSummary parse_input_file(const std::filesystem::path& input_file){
     summary.categories.insert(summary.categories.end(), categories.begin(), categories.end());
 
     PLOG_INFO << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories";
-    std::cout << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories";
 
     return summary;
 }
@@ -288,7 +287,9 @@ int index_main(IndexArguments & opt)
     }
     std::filesystem::create_directory(opt.tmp_dir);
 
-    LOG_INFO << "Running charon index!";
+    auto args = opt.to_string();
+    LOG_INFO << "Running charon index\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
+
 
     auto summary = parse_input_file(opt.input_file);
     auto stats = count_and_store_hashes(opt, summary);

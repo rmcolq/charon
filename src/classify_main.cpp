@@ -7,6 +7,7 @@
 #include "index.hpp"
 #include "load_index.hpp"
 #include "utils.hpp"
+#include "version.h"
 
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
@@ -158,7 +159,8 @@ int classify_main(ClassifyArguments & opt)
         opt.db += ".idx";
     }
 
-    LOG_INFO << "Running charon classify";
+    auto args = opt.to_string();
+    LOG_INFO << "Running charon classify\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
 
     auto index = Index();
     load_index(index, opt.db);
