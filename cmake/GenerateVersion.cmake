@@ -1,3 +1,5 @@
+# NB follows example detailed in https://www.marcusfolkesson.se/blog/git-version-in-cmake/
+
 find_package(Git)
 
 if(GIT_EXECUTABLE)
