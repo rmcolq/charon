@@ -180,23 +180,31 @@ public:
     }
 
     void call_category(int8_t confidence_threshold, uint8_t min_num_hits) {
-        double first = 0;
-        uint8_t first_pos = 0;
-        double second = 0;
-        uint8_t second_pos = 1;
+        //TODO extend this to work with more than 2 categories
+        assert(probabilities_.size() == 2);
 
-        for (auto i = 0; i < probabilities_.size(); ++i) {
+        double first = probabilities_.at(0);
+        uint8_t first_pos = 0;
+        double second = probabilities_.at(0);
+        uint8_t second_pos = 1;
+        if (second > first)
+        {
+            std::swap(first, second);
+            std::swap(first_pos, second_pos);
+        }
+
+        /*for (auto i = 0; i < probabilities_.size(); ++i) {
             const double &val = probabilities_.at(i);
-            if (val > second) {
+            if (val >= second) {
                 second = val;
                 second_pos = i;
-                if (second > first)
+                if (second >= first)
                 {
                     std::swap(first, second);
                     std::swap(first_pos, second_pos);
                 }
             }
-        }
+        }*/
         if (second == 0 and first > 0)
         {
             call_ = first_pos;
