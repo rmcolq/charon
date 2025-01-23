@@ -180,13 +180,16 @@ public:
     }
 
     void call_category(int8_t confidence_threshold, uint8_t min_num_hits) {
+        bool meet_min_hits_threshold = false;
         for (auto i=0; i<probabilities_.size(); ++i)
         {
             if (counts_(i,i) > min_num_hits){
-                continue;
+                meet_min_hits_threshold = true;
+                break;
             }
-            return; // if none of the categories has at least the min_num_hits, no call
         }
+        if (not meet_min_hits_threshold)
+            return; // if none of the categories has at least the min_num_hits, no call
 
         double first = 0;
         uint8_t first_pos = 0;
