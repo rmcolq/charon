@@ -179,7 +179,15 @@ public:
         get_props();
     }
 
-    void call_category(int8_t confidence_threshold) {
+    void call_category(int8_t confidence_threshold, uint8_t min_num_hits) {
+        for (auto i=0; i<probabilities_.size(); ++i)
+        {
+            if (counts_(i,i) > min_num_hits){
+                continue;
+            }
+            return; // if none of the categories has at least the min_num_hits, no call
+        }
+
         double first = 0;
         uint8_t first_pos = 0;
         double second = 0;
@@ -221,7 +229,7 @@ public:
                     probabilities_.at(j) *= result_pair.neg;
             }
         }
-        call_category(stats_model.confidence_threshold());
+        call_category(stats_model.confidence_threshold(), stats_model.min_num_hits());
     }
 
     void print_result(const InputSummary &summary) {

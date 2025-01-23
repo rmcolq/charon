@@ -85,7 +85,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
         {
             records.push_back(std::move(record));
         }
-        
+
 #pragma omp master
         result.check_entries_size(opt.chunk_size);
 #pragma omp barrier
