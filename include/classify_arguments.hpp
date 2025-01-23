@@ -16,7 +16,7 @@ struct ClassifyArguments {
     float lo_hi_threshold {0.2};
     uint16_t num_reads_to_fit {2000};
     uint8_t confidence_threshold{7};
-    uint8_t min_hits{5};
+    uint8_t min_hits{2};
 
     // Output options
     std::string category_to_extract;

@@ -180,17 +180,6 @@ public:
     }
 
     void call_category(int8_t confidence_threshold, uint8_t min_num_hits) {
-        bool meet_min_hits_threshold = false;
-        for (auto i=0; i<probabilities_.size(); ++i)
-        {
-            if (counts_(i,i) > min_num_hits){
-                meet_min_hits_threshold = true;
-                break;
-            }
-        }
-        if (not meet_min_hits_threshold)
-            return; // if none of the categories has at least the min_num_hits, no call
-
         double first = 0;
         uint8_t first_pos = 0;
         double second = 0;
@@ -216,6 +205,9 @@ public:
             if (confidence_score_ > confidence_threshold)
                 call_ = first_pos;
         }
+
+        if ( counts_(first_pos,first_pos) - counts_(second_pos,second_pos) < min_num_hits )
+            call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this number of hits difference, then no call
     }
 
     void classify(const StatsModel &stats_model) {
