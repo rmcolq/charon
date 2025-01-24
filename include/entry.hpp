@@ -185,7 +185,7 @@ public:
 
         double first = probabilities_.at(0);
         uint8_t first_pos = 0;
-        double second = probabilities_.at(0);
+        double second = probabilities_.at(1);
         uint8_t second_pos = 1;
         if (second > first)
         {
