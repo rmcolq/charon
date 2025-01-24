@@ -115,6 +115,12 @@ struct GammaParams
         shape = (3 - s + std::sqrt((s-3)*(s-3) + 24*s))/(12*s);
         scale = mu / shape;
     }
+
+    void fit_loc(const std::vector<float> & training_data)
+    {
+        const auto mu = mean(training_data);
+        loc = mu - (shape * scale);
+    }
 };
 
 struct ProbPair {
@@ -157,7 +163,8 @@ class Model
                 PLOG_INFO << "Model " << +id << " fit neg data with Gamma (shape:" << neg.shape << ", loc: 0, scale: "
                           << neg.scale << ")";
             } else {
-                PLOG_INFO << "Model " << +id << " using default for neg data with Gamma (shape:" << neg.shape <<", loc: 0, scale: "<< neg.scale << ")";
+                neg.fit_loc(training_data.neg);
+                PLOG_INFO << "Model " << +id << " using default for neg data with Gamma (shape:" << neg.shape << ", loc: " << neg.loc << ", scale: "<< neg.scale << ")";
             }
             ready = true;
             training_data.clear();
