@@ -123,6 +123,7 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
     PLOG_DEBUG << "Defined stats";
 
     const auto max_num_hashes = max_num_hashes_for_fpr(opt);
+    PLOG_INFO << "Maximum hashes permitted per bin for fpr rate " << opt.max_fpr << " is " << max_num_hashes;
 
 #pragma omp parallel for num_threads(opt.threads)
     for (const auto pair : summary.filepath_to_bin) {
