@@ -95,15 +95,15 @@ size_t bin_size_in_bits(const IndexArguments & opt, const uint64_t & num_element
     return result;
 }
 
-double max_num_hashes_for_fpr(const IndexArguments & opt)
+size_t max_num_hashes_for_fpr(const IndexArguments & opt)
 {
     assert(opt.bits > 0);
     assert(opt.max_fpr > 0.0);
     assert(opt.max_fpr < 1.0);
 
-    double const numerator{-static_cast<double>(opt.num_hash / opt.bits)};
-    double const denominator{std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash))};
-    double const result{std::ceil(numerator / denominator)};
+    double const numerator{-static_cast<double>(opt.bits / opt.num_hash)};
+    double const denominator{std::log(1 - std::exp(std::log(opt.max_fpr) / static_cast<double>(opt.num_hash)))};
+    double const result{std::floor(numerator * denominator)};
 
     return result;
 }

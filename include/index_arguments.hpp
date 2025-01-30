@@ -19,7 +19,7 @@ struct IndexArguments {
     // IBF options
     mutable size_t bits {std::numeric_limits<uint32_t>::max()}; // Allow to change bits for each partition
     uint8_t num_hash {3};
-    double max_fpr {0.02};
+    double max_fpr {0.01};
 
     // General options
     std::string log_file {"charon.log"};
