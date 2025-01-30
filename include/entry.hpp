@@ -217,7 +217,7 @@ public:
 
         const auto & first_count = counts_(first_pos,first_pos);
         const auto & second_count = counts_(second_pos,second_pos);
-        if (first_count - second_count < min_num_hits){
+        if (second_count > first_count or first_count - second_count < min_num_hits){
             PLOG_DEBUG << read_id_ << " has first count " << +first_count << " and second count " << +second_count << " which have differences less than " << +min_num_hits;
             call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this number of hits difference, then no call
         }
