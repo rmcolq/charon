@@ -66,7 +66,7 @@ void setup_classify_subcommand(CLI::App& app)
     classify_subcommand->callback([opt]() { classify_main(*opt); });
 }
 
-void classify_reads(const ClassifyArguments& opt, const Index& index, Result& result){
+void classify_reads(const ClassifyArguments& opt, const Index& index){
     PLOG_INFO << "Classifying file " << opt.read_file;
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
@@ -79,6 +79,9 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
 
+    auto result = Result<record_type>(opt, index.summary());
+    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
+
     for (auto && chunk : fin | seqan3::views::chunk(opt.chunk_size))
     {
         // You can use a for loop:
@@ -87,33 +90,27 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
             records.push_back(std::move(record));
         }
 
-#pragma omp critical(result_size_check)
-        {
-            result.check_entries_size(opt.chunk_size);
-        }
-
 #pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
         for (auto i=0; i<records.size(); ++i){
 
             const auto & record = records[i];
-            //PLOG_INFO << "Processing read " << record.id();
             const auto read_id = split(record.id(), " ")[0];
             const auto read_length = record.sequence().size();
             if (read_length > std::numeric_limits<uint32_t>::max()){
                 PLOG_INFO << "Ignoring read " << record.id() << " as too long!";
                 continue;
             }
-            //auto read_quality = std::max(record.base_qualities());
-#pragma omp critical
-            {
-                result.add_read(read_id, read_length);
-            }
+
+            auto read = ReadEntry(read_id, read_length, result.input_summary());
             for (auto && value : record.sequence() | hash_adaptor) {
                 const auto & entry = agent.bulk_contains(value);
-                result.update_read(read_id, entry);
+                read.update_entry(entry);
             }
             PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
-            result.post_process_read(read_id);
+
+            read.post_process(result.input_summary());
+#pragma omp critical(add_read_to_results)
+            result.add_read(read, record);
         }
         records.clear();
     }
@@ -121,7 +118,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index, Result& re
     result.print_summary();
 }
 
-void extract(const ClassifyArguments& opt, Result& result)
+/*void extract(const ClassifyArguments& opt, Result& result)
 {
     LOG_INFO << "Extracting reads matching category " << opt.category_to_extract;
     const auto category = result.category_index(opt.category_to_extract);
@@ -146,7 +143,7 @@ void extract(const ClassifyArguments& opt, Result& result)
     }
 
     LOG_INFO << "Wrote " << total << " reads to file " << opt.extract_file.c_str() ;
-}
+}*/
 
 
 int classify_main(ClassifyArguments & opt)
@@ -182,13 +179,7 @@ int classify_main(ClassifyArguments & opt)
         opt.extract_file = opt.read_file + ".extracted.fq";
     }
 
-    auto result = Result(opt, index.summary());
-    PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
-
-    classify_reads(opt, index, result);
-
-    if (run_extract)
-        extract(opt, result);
+    classify_reads(opt, index);
 
     return 0;
 }
