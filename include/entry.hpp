@@ -209,12 +209,13 @@ public:
                 }
             }
         }*/
+
         if (second == 0 and first > 0)
         {
             call_ = first_pos;
 
         } else {
-            confidence_score_ = static_cast<int8_t>(std::log10(first/second));
+            confidence_score_ = static_cast<int8_t>(first/second);
             if (confidence_score_ > confidence_threshold)
                 call_ = first_pos;
         }
