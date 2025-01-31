@@ -45,6 +45,7 @@ CPMGetPackage (plog)
 CPMGetPackage (gcem)
 CPMGetPackage (statslib)
 CPMGetPackage (bzip2)
+CPMGetPackage (zlib)
 
 # -----------------------------------------------------------------------------
 # install
@@ -57,6 +58,7 @@ include_directories(
         ${gcem_SOURCE_DIR}/include
         ${statslib_SOURCE_DIR}/include
         ${bzip2_SOURCE_DIR}
+        ${zlib_SOURCE_DIR}
 )
 
 file(GLOB_RECURSE SRC_FILES
