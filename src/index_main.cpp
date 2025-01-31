@@ -241,7 +241,7 @@ Index build_index(const IndexArguments& opt, const InputSummary& summary, InputS
                                              seqan3::hash_function_count{opt.num_hash}};
 
 #pragma omp parallel for
-    for ( auto bucket=0; bucket<summary.num_bins; ++bucket ) {
+    for ( uint8_t bucket=0; bucket<summary.num_bins; ++bucket ) {
         const auto & bins = bucket_to_bins_map.at(bucket);
         for (auto const & bin : bins){
             const auto& hashes = load_hashes( std::to_string(bin), opt.tmp_dir );

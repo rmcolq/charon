@@ -8,7 +8,7 @@
 /// Collection of all options of index subcommand.
 struct ClassifyArguments {
     // IO options
-    std::string read_file;
+    std::filesystem::path read_file;
     std::string db;
     uint8_t chunk_size { 100 };
 
@@ -19,8 +19,9 @@ struct ClassifyArguments {
     uint8_t min_hits{2};
 
     // Output options
+    bool run_extract {false};
     std::string category_to_extract;
-    std::string extract_file;
+    std::filesystem::path extract_file;
 
     // General options
     std::string log_file {"charon.log"};
@@ -32,7 +33,7 @@ struct ClassifyArguments {
         std::string ss;
 
         ss += "\n\nClassify Arguments:\n\n";
-        ss += "\tread_file:\t\t" + read_file + "\n";
+        ss += "\tread_file:\t\t" + read_file.string() + "\n";
         ss += "\tdb:\t\t\t" + db + "\n\n";
 
         ss += "\tchunk_size:\t\t" + std::to_string(chunk_size) + "\n";
@@ -41,7 +42,7 @@ struct ClassifyArguments {
         ss += "\tmin_hits:\t\t" + std::to_string(min_hits) + "\n\n";
 
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
-        ss += "\textract_file:\t\t" + extract_file + "\n\n";
+        ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";
 
         ss += "\tlog_file:\t\t" + log_file + "\n";
         ss += "\tthreads:\t\t" + std::to_string(threads) + "\n";

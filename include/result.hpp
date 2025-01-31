@@ -6,6 +6,7 @@
 #include <string>
 
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
+#include <seqan3/io/sequence_file/output.hpp>
 #include <plog/Log.h>
 
 #include "entry.hpp"
@@ -30,7 +31,7 @@ struct ReadPair
     ReadEntry read;
 };
 
-template<class record_type>
+template<class record_type, class outfile_field_ids, class outfile_format>
 class Result
 {
     private:
@@ -38,6 +39,10 @@ class Result
         ResultSummary result_summary_;
         StatsModel stats_model_;
         std::vector<ReadPair<record_type>> cached_reads_;
+
+        bool run_extract_;
+        uint8_t extract_category_;
+        seqan3::sequence_file_output<outfile_field_ids, outfile_format> extract_handle_;
 
     public:
         Result() = default;
@@ -49,10 +54,17 @@ class Result
 
         Result(const ClassifyArguments& opt, const InputSummary & summary):
                 input_summary_{summary},
-                result_summary_(summary.num_categories())
+                result_summary_(summary.num_categories()),
+                run_extract_(opt.run_extract),
+                extract_handle_{std::cout, seqan3::format_fasta{}}
         {
             stats_model_ = StatsModel(opt, summary);
+            if (opt.run_extract){
+                extract_handle_ = seqan3::sequence_file_output{opt.extract_file};
+                extract_category_ = category_index(opt.category_to_extract);
+            }
             cached_reads_.reserve(opt.num_reads_to_fit*summary.num_categories()*4);
+
         };
 
         const InputSummary& input_summary() const
@@ -65,7 +77,7 @@ class Result
             return input_summary_.category_index(category);
         }
 
-        void classify_read(ReadEntry& read_entry)
+        bool classify_read(ReadEntry& read_entry)
         {
             PLOG_VERBOSE << "Classify read " << read_entry.read_id();
             read_entry.classify(stats_model_);
@@ -81,11 +93,21 @@ class Result
                     result_summary_.unclassified_count += 1;
                 }
             }
+            return run_extract_ and read_entry.call() == extract_category_;
+        }
+
+        void extract_read(const record_type& record)
+        {
+#pragma omp critical(extract_read)
+                extract_handle_.push_back(record);
         }
 
         void add_read(ReadEntry& read_entry, const record_type& record){
             if (stats_model_.ready()) {
-                classify_read(read_entry);
+                auto read_to_extract = classify_read(read_entry);
+                if (run_extract_ and read_to_extract){
+                    extract_read(record);
+                }
             } else {
                 PLOG_VERBOSE << "Add read " << read_entry.read_id() << " to training ";
 #pragma omp critical(add_to_cache)
@@ -114,7 +136,10 @@ class Result
             {
                 auto & read_entry = read_pair.read;
                 const auto & record = read_pair.record;
-                classify_read(read_entry);
+                bool read_to_extract = classify_read(read_entry);
+                if (run_extract_ and read_to_extract){
+                    extract_read(record);
+                }
             }
             cached_reads_.resize(0);
         }

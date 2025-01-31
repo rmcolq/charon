@@ -79,7 +79,11 @@ void classify_reads(const ClassifyArguments& opt, const Index& index){
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
 
-    auto result = Result<record_type>(opt, index.summary());
+    using outfile_field_ids = decltype(fin)::field_ids;
+    using outfile_format = decltype(fin)::valid_formats;
+
+    auto result = Result<record_type, outfile_field_ids, outfile_format>(opt, index.summary());
+
     PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
 
     for (auto && chunk : fin | seqan3::views::chunk(opt.chunk_size))
@@ -166,18 +170,20 @@ int classify_main(ClassifyArguments & opt)
     auto index = Index();
     load_index(index, opt.db);
 
-    bool run_extract = (opt.category_to_extract != "");
+    opt.run_extract = (opt.category_to_extract != "");
     const auto categories = index.categories();
-    if (run_extract and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
+    if (opt.run_extract and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
     {
         std::string options = "";
         for (auto i: categories)
             options += i + " ";
         PLOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ " << options << "]";
         return 1;
-    } else if (run_extract and opt.extract_file == ""){
-        opt.extract_file = opt.read_file + ".extracted.fq";
+    } else if (opt.run_extract and opt.extract_file == ""){
+        opt.extract_file = opt.read_file;
+        opt.extract_file.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
     }
+
 
     classify_reads(opt, index);
 
