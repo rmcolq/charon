@@ -6,7 +6,6 @@
 #include <string>
 
 #include <plog/Log.h>
-#include <seqan3/io/sequence_file/record.hpp>
 
 #include <counts.hpp>
 #include <input_summary.hpp>
