@@ -34,6 +34,14 @@ CPMDeclarePackage ( gcem
         GIT_SHALLOW TRUE
         DOWNLOAD_ONLY TRUE
 )
+CPMDeclarePackage ( bzip2
+        NAME bzip2
+        GITHUB_REPOSITORY libarchive/bzip2
+        GIT_TAG 6a8690f
+        GIT_SHALLOW TRUE
+        DOWNLOAD_ONLY TRUE
+)
+
 # googletest
 set (GOOGLETEST_VERSION 1.15.2)
 CPMDeclarePackage (googletest

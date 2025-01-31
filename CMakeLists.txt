@@ -44,6 +44,7 @@ CPMGetPackage (seqan3)
 CPMGetPackage (plog)
 CPMGetPackage (gcem)
 CPMGetPackage (statslib)
+CPMGetPackage (bzip2)
 
 # -----------------------------------------------------------------------------
 # install
@@ -55,6 +56,7 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/lib/include
         ${gcem_SOURCE_DIR}/include
         ${statslib_SOURCE_DIR}/include
+        ${bzip2_SOURCE_DIR}
 )
 
 file(GLOB_RECURSE SRC_FILES
