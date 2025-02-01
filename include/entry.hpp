@@ -25,7 +25,7 @@ private:
     //std::vector<float> unique_proportions_; // this collects over categories the proportion of all hashes which were unique to the given category
     std::vector<double> probabilities_; // this collects over categories the probability of this read given the data come from that category
     uint8_t call_ = std::numeric_limits<uint8_t>::max();
-    int8_t confidence_score_ = std::numeric_limits<int8_t>::max();
+    uint8_t confidence_score_ = 0;
 public:
     ReadEntry() = default;
 
@@ -184,7 +184,7 @@ public:
         get_proportions();
     }
 
-    void call_category(int8_t confidence_threshold, uint8_t min_num_hits) {
+    void call_category(uint8_t confidence_threshold, uint8_t min_num_hits) {
         //TODO extend this to work with more than 2 categories
         assert(probabilities_.size() == 2);
 
@@ -214,12 +214,14 @@ public:
         if (second == 0 and first > 0)
         {
             call_ = first_pos;
-
+            confidence_score_ = std::numeric_limits<uint8_t>::max();
         } else {
-            auto ratio = static_cast<uint>(first/second);
+            auto ratio = first/second;
             PLOG_VERBOSE << "confidence score " << ratio << " from " << first << "/" << second;
             if (ratio < std::numeric_limits<uint8_t>::max())
                 confidence_score_ = static_cast<uint8_t>(ratio);
+            else
+                confidence_score_ = std::numeric_limits<uint8_t>::max();
             if (confidence_score_ > confidence_threshold)
                 call_ = first_pos;
         }
