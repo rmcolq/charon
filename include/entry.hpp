@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <algorithm>
 
 #include <plog/Log.h>
 
@@ -215,7 +216,9 @@ public:
             call_ = first_pos;
 
         } else {
-            confidence_score_ = static_cast<int8_t>(first/second);
+            auto ratio = first/second;
+            if (ratio < std::numeric_limits<uint8_t>::max())
+                confidence_score_ = static_cast<uint8_t>(ratio);
             if (confidence_score_ > confidence_threshold)
                 call_ = first_pos;
         }
