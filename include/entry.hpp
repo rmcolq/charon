@@ -216,7 +216,8 @@ public:
             call_ = first_pos;
 
         } else {
-            auto ratio = first/second;
+            auto ratio = static_cast<uint>(first/second);
+            PLOG_VERBOSE << "confidence score " << ratio << " from " << first << "/" << second;
             if (ratio < std::numeric_limits<uint8_t>::max())
                 confidence_score_ = static_cast<uint8_t>(ratio);
             if (confidence_score_ > confidence_threshold)
