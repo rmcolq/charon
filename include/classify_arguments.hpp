@@ -15,7 +15,7 @@ struct ClassifyArguments {
     // Stats options
     float lo_hi_threshold {0.2};
     uint16_t num_reads_to_fit {5000};
-    uint8_t confidence_threshold{2};
+    uint8_t confidence_threshold{1};
     uint8_t min_hits{2};
     std::string dist{"gamma"};
 
