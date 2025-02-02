@@ -232,7 +232,7 @@ class Model
             if (training_data.neg_complete ) {
                 b_neg.fit(training_data.neg);
                 PLOG_INFO << "Model " << +id << " fit neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
-                          << b_neg.beta << ")";
+                          << b_neg.beta << ", loc: " << b_neg.loc << ")";
             } else {
                 PLOG_INFO << "Model " << +id << " using default for neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
                                              << b_neg.beta << ", loc: " << b_neg.loc << ")";
