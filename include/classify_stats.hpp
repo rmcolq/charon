@@ -147,8 +147,12 @@ struct BetaParams
         const auto var = variance(training_data, mu);
         PLOG_INFO << "Fitting Beta to data with mean " << mu << " and sample variance " << var;
         assert(var < mu*(1-mu));
+
         alpha = mu*((mu*(1-mu)/var)-1);
         beta = (1-mu)*((mu*(1-mu)/var)-1);
+
+        assert(alpha > 0);
+        assert(beta > 0);
     }
 };
 
