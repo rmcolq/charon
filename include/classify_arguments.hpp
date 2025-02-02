@@ -17,7 +17,7 @@ struct ClassifyArguments {
     uint16_t num_reads_to_fit {5000};
     uint8_t confidence_threshold{0};
     uint8_t min_hits{2};
-    std::string dist{"gamma"};
+    std::string dist{"beta"};
 
     // Output options
     bool run_extract {false};
@@ -41,6 +41,7 @@ struct ClassifyArguments {
         ss += "\tnum_reads_to_fit:\t" + std::to_string(num_reads_to_fit) + "\n";
         ss += "\tconfidence_threshold:\t" + std::to_string(confidence_threshold) + "\n";
         ss += "\tmin_hits:\t\t" + std::to_string(min_hits) + "\n\n";
+        ss += "\tdist:\t\t" + dist + "\n\n";
 
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
         ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";
