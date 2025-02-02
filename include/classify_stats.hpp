@@ -26,7 +26,7 @@ double variance(const auto & v, const auto & mean) {
         return accumulator + ((val - mean)*(val - mean));
     };
     double sum = std::accumulate(std::begin(v), std::end(v), 0.0, variance_func);
-    return v.size() <= 1 ? 0 : sum / v.size() - 1;
+    return v.size() <= 1 ? 0 : sum / (v.size() - 1);
 }
 
 class TrainingData
@@ -145,7 +145,7 @@ struct BetaParams
     {
         const auto mu = mean(training_data);
         const auto var = variance(training_data, mu);
-
+        PLOG_INFO << "Fitting Beta to data with mean " << mu << " and sample variance " << var;
         assert(var < mu*(1-mu));
         alpha = mu*((mu*(1-mu)/var)-1);
         beta = (1-mu)*((mu*(1-mu)/var)-1);
