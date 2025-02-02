@@ -157,11 +157,11 @@ struct BetaParams
 
         alpha = mu*((mu*(1-mu)/var)-1);
         beta = (1-mu)*((mu*(1-mu)/var)-1);
+        if (beta > 90)
+            beta = 90;
 
         assert(alpha > 0);
         assert(beta > 0);
-
-        fit_loc(training_data);
     }
 
 };
