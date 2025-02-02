@@ -148,7 +148,7 @@ struct BetaParams
         loc = mu - alpha/(alpha + beta);
     }
 
-    void fit (const std::vector<float> & training_data)
+    void fit (const std::vector<float> & training_data, bool is_pos)
     {
         const auto mu = mean(training_data);
         const auto var = variance(training_data, mu);
@@ -157,8 +157,11 @@ struct BetaParams
 
         alpha = mu*((mu*(1-mu)/var)-1);
         beta = (1-mu)*((mu*(1-mu)/var)-1);
-        if (beta > 90)
-            beta = 90;
+        if (beta > 85)
+            beta = 85;
+
+        if (is_pos and beta > alpha)
+            alpha = beta;
 
         assert(alpha > 0);
         assert(beta > 0);
@@ -221,7 +224,7 @@ class Model
         {
             assert(training_data.id == id);
             if (training_data.pos_complete ) {
-                b_pos.fit(training_data.pos);
+                b_pos.fit(training_data.pos, true);
                 PLOG_INFO << "Model " << +id << " fit pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
                           << b_pos.beta << ")";
             } else {
@@ -230,7 +233,7 @@ class Model
             }
 
             if (training_data.neg_complete ) {
-                b_neg.fit(training_data.neg);
+                b_neg.fit(training_data.neg, false);
                 PLOG_INFO << "Model " << +id << " fit neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
                           << b_neg.beta << ", loc: " << b_neg.loc << ")";
             } else {
