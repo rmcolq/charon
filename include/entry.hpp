@@ -22,7 +22,7 @@ private:
     std::unordered_map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
     Counts<uint32_t> counts_;
     std::vector<float> proportions_; // this collects over categories the proportion of all hashes which were from the given category
-    //std::vector<float> unique_proportions_; // this collects over categories the proportion of all hashes which were unique to the given category
+    std::vector<float> unique_proportions_; // this collects over categories the proportion of all hashes which were unique to the given category
     std::vector<double> probabilities_; // this collects over categories the probability of this read given the data come from that category
     uint8_t call_ = std::numeric_limits<uint8_t>::max();
     uint8_t confidence_score_ = 0;
@@ -42,7 +42,7 @@ public:
     ReadEntry(const std::string& read_id, const uint32_t& length, const InputSummary &summary) :
             read_id_(read_id),
             proportions_(summary.num_categories(),0),
-            //unique_proportions_(summary.num_categories(),0),
+            unique_proportions_(summary.num_categories(),0),
             probabilities_(summary.num_categories(),1)
     {
         PLOG_DEBUG << "Initialize entry with read_id " << read_id << " and length " << length;
@@ -65,9 +65,9 @@ public:
         return proportions_;
     }
 
-    /*std::vector<float> unique_proportions() const {
+    std::vector<float> unique_proportions() const {
         return unique_proportions_;
-    }*/
+    }
 
     const uint8_t call() const {
         return call_;
@@ -150,7 +150,7 @@ public:
         return;
     };
 
-    /*void get_unique_proportions() {
+    void get_unique_proportions() {
         PLOG_DEBUG << "collect_unique_proportions for read_id " << read_id_;
         const auto num_categories = unique_proportions_.size();
         assert(max_bits_.size() == num_categories);
@@ -175,7 +175,7 @@ public:
             unique_proportions_.at(i) = static_cast< float >(unique_counts.at(i)) / static_cast< float >(num_hashes_);
         }
         return;
-    };*/
+    };
 
     void post_process(const InputSummary &summary) {
         get_max_bits(summary);
@@ -288,8 +288,8 @@ public:
         std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << num_hashes_ << "\t" << +confidence_score_ << "\t" ;
         std::cout.precision(6);
         for (auto i = 0; i < summary.num_categories(); i++) {
-            std::cout << summary.categories.at(i) << ":" << counts_(i, i) << ":" << proportions_.at(i) << ":"
-                      << probabilities_.at(i) << " ";
+            std::cout << summary.categories.at(i) << ":" << counts_(i, i) << ":" << proportions_.at(i)
+                      << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";
         }
 
         std::cout << std::endl;
