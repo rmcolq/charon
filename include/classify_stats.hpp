@@ -135,11 +135,18 @@ struct BetaParams
 {
     float alpha;
     float beta;
+    float loc;
 
     BetaParams(const float & _alpha, const float & _beta):
             alpha{_alpha},
             beta{_beta}
     {};
+
+    void fit_loc(const std::vector<float> & training_data)
+    {
+        const auto mu = mean(training_data);
+        loc = mu - alpha/(alpha + beta);
+    }
 
     void fit (const std::vector<float> & training_data)
     {
@@ -153,7 +160,10 @@ struct BetaParams
 
         assert(alpha > 0);
         assert(beta > 0);
+
+        fit_loc(training_data);
     }
+
 };
 
 struct ProbPair {
@@ -225,7 +235,7 @@ class Model
                           << b_neg.beta << ")";
             } else {
                 PLOG_INFO << "Model " << +id << " using default for neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
-                                             << b_neg.beta << ")";
+                                             << b_neg.beta << ", loc: " << b_neg.loc << ")";
             }
             ready = true;
             training_data.clear();
@@ -250,7 +260,7 @@ class Model
                 p_neg = stats::dgamma(read_proportion - g_neg.loc, g_neg.shape, g_neg.scale);
             } else {
                 p_pos = stats::dbeta(read_proportion, b_pos.alpha, b_pos.beta);
-                p_neg = stats::dbeta(read_proportion, b_neg.alpha, b_neg.beta);
+                p_neg = stats::dbeta(read_proportion - b_neg.loc, b_neg.alpha, b_neg.beta);
             }
             const auto total = p_err + p_pos + p_neg;
             // Use Neyman Pearson Lemma
