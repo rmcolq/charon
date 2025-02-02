@@ -21,6 +21,14 @@ double mean(const auto & v) {
     return v.empty() ? 0 : sum / v.size();
 }
 
+double variance(const auto & v, const auto & mean) {
+    auto variance_func = [&mean](float accumulator, const float& val) {
+        return accumulator + ((val - mean)*(val - mean));
+    };
+    double sum = std::accumulate(std::begin(v), std::end(v), 0.0, variance_func);
+    return v.size() <= 1 ? 0 : sum / v.size() - 1;
+}
+
 class TrainingData
 {
     private:
@@ -65,7 +73,7 @@ class TrainingData
             } else {
                 check_status();
             }
-            PLOG_VERBOSE << "Add to pos results in pos size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
+            PLOG_VERBOSE << "Add to g_pos results in g_pos size " << pos.size() << " and g_neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 
@@ -76,7 +84,7 @@ class TrainingData
             } else {
                 check_status();
             }
-            PLOG_VERBOSE << "Add to neg results in pos size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
+            PLOG_VERBOSE << "Add to g_neg results in g_pos size " << pos.size() << " and g_neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 
@@ -123,6 +131,27 @@ struct GammaParams
     }
 };
 
+struct BetaParams
+{
+    float alpha;
+    float beta;
+
+    BetaParams(const float & _alpha, const float & _beta):
+            alpha{_alpha},
+            beta{_beta}
+    {};
+
+    void fit (const std::vector<float> & training_data)
+    {
+        const auto mu = mean(training_data);
+        const auto var = variance(training_data, mu);
+
+        assert(var < mu*(1-mu));
+        alpha = mu*((mu*(1-mu)/var)-1);
+        beta = (1-mu)*((mu*(1-mu)/var)-1);
+    }
+};
+
 struct ProbPair {
     double pos;
     double neg;
@@ -133,8 +162,11 @@ class Model
     private:
         uint8_t id;
         bool ready {false};
-        GammaParams pos{25,0,0.02};
-        GammaParams neg{10,0,0.005};
+        std::string dist{"gamma"};
+        GammaParams g_pos{25, 0, 0.02};
+        GammaParams g_neg{10, 0, 0.005};
+        BetaParams b_pos{6,4};
+        BetaParams b_neg{5,80};
     public:
         Model() = default;
         Model(Model const &) = default;
@@ -143,37 +175,79 @@ class Model
         Model & operator=(Model &&) = default;
         ~Model() = default;
 
-        Model(const uint8_t i):
-            id{i}
+        Model(const uint8_t i, const std::string& d):
+            id{i},
+            dist{d}
         {};
+
+        void train_gamma(TrainingData & training_data)
+        {
+            assert(training_data.id == id);
+            if (training_data.pos_complete ) {
+                g_pos.fit(training_data.pos);
+                PLOG_INFO << "Model " << +id << " fit g_pos data with Gamma (shape:" << g_pos.shape << ", loc: 0, scale: "
+                          << g_pos.scale << ")";
+            } else {
+                PLOG_INFO << "Model " << +id << " using default for g_pos data with Gamma (shape:" << g_pos.shape << ", loc: 0, scale: " << g_pos.scale << ")";
+            }
+
+            if (training_data.neg_complete ) {
+                g_neg.fit(training_data.neg);
+                PLOG_INFO << "Model " << +id << " fit g_neg data with Gamma (shape:" << g_neg.shape << ", loc: 0, scale: "
+                          << g_neg.scale << ")";
+            } else {
+                g_neg.fit_loc(training_data.neg);
+                PLOG_INFO << "Model " << +id << " using default for g_neg data with Gamma (shape:" << g_neg.shape << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale << ")";
+            }
+            ready = true;
+            training_data.clear();
+        }
+
+        void train_beta(TrainingData & training_data)
+        {
+            assert(training_data.id == id);
+            if (training_data.pos_complete ) {
+                b_pos.fit(training_data.pos);
+                PLOG_INFO << "Model " << +id << " fit pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
+                          << b_pos.beta << ")";
+            } else {
+                PLOG_INFO << "Model " << +id << " using default for pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
+                          << b_pos.beta << ")";
+            }
+
+            if (training_data.neg_complete ) {
+                b_neg.fit(training_data.neg);
+                PLOG_INFO << "Model " << +id << " fit neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
+                          << b_neg.beta << ")";
+            } else {
+                PLOG_INFO << "Model " << +id << " using default for neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
+                                             << b_neg.beta << ")";
+            }
+            ready = true;
+            training_data.clear();
+        }
 
         void train(TrainingData & training_data)
         {
             assert(training_data.id == id);
-            if (training_data.pos_complete ) {
-                pos.fit(training_data.pos);
-                PLOG_INFO << "Model " << +id << " fit pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "
-                          << pos.scale << ")";
-            } else {
-                PLOG_INFO << "Model " << +id << " using default for pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "<< pos.scale << ")";
-            }
-
-            if (training_data.neg_complete ) {
-                neg.fit(training_data.neg);
-                PLOG_INFO << "Model " << +id << " fit neg data with Gamma (shape:" << neg.shape << ", loc: 0, scale: "
-                          << neg.scale << ")";
-            } else {
-                neg.fit_loc(training_data.neg);
-                PLOG_INFO << "Model " << +id << " using default for neg data with Gamma (shape:" << neg.shape << ", loc: " << neg.loc << ", scale: "<< neg.scale << ")";
-            }
+            if (dist == "beta")
+                train_beta(training_data);
+            else
+                train_gamma(training_data);
             ready = true;
             training_data.clear();
         }
 
         ProbPair prob(const float & read_proportion) const {
             const auto p_err = stats::dexp(read_proportion,300);
-            const auto p_pos = stats::dgamma(read_proportion,pos.shape,pos.scale);
-            const auto p_neg = stats::dgamma(read_proportion,neg.shape,neg.scale);
+            float p_pos, p_neg;
+            if ( dist == "gamma") {
+                p_pos = stats::dgamma(read_proportion - g_pos.loc, g_pos.shape, g_pos.scale);
+                p_neg = stats::dgamma(read_proportion - g_neg.loc, g_neg.shape, g_neg.scale);
+            } else {
+                p_pos = stats::dbeta(read_proportion, b_pos.alpha, b_pos.beta);
+                p_neg = stats::dbeta(read_proportion, b_neg.alpha, b_neg.beta);
+            }
             const auto total = p_err + p_pos + p_neg;
             // Use Neyman Pearson Lemma
             return ProbPair(p_pos/total, (p_err + p_neg)/total);
@@ -209,7 +283,7 @@ class StatsModel
                 min_hits_(opt.min_hits)
         {
             for (auto i=0; i<summary.num_categories(); ++i){
-                models_.emplace_back(Model(i));
+                models_.emplace_back(Model(i, opt.dist));
                 training_data_.emplace_back(TrainingData(opt, i));
             }
             PLOG_DEBUG << "Initialize stats model with " << training_data_.size() << " sets of training data ";
@@ -288,7 +362,7 @@ class StatsModel
                 }
             }
             bool add_to_training = (pos_i != std::numeric_limits<uint8_t>::max() and num_above_threshold <= 1);
-            PLOG_VERBOSE << "add_to_training is " << add_to_training << " with hi pos " << +pos_i;
+            PLOG_VERBOSE << "add_to_training is " << add_to_training << " with hi g_pos " << +pos_i;
 
             if (add_to_training) {
                 PLOG_VERBOSE << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();

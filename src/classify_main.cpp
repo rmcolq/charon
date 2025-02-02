@@ -55,6 +55,9 @@ void setup_classify_subcommand(CLI::App& app)
             ->check(CLI::NonexistentPath.description(""))
             ->type_name("FILE");
 
+    classify_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
+            ->type_name("STRING");
+
     classify_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
             ->type_name("FILE");
@@ -182,6 +185,12 @@ int classify_main(ClassifyArguments & opt)
     } else if (opt.run_extract and opt.extract_file == ""){
         opt.extract_file = opt.read_file;
         opt.extract_file.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
+    }
+
+    if (opt.dist != "gamma" and opt.dist != "beta")
+    {
+        PLOG_ERROR << "Supported distributions are [gamma , beta]";
+        return 1;
     }
 
 

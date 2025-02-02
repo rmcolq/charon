@@ -17,6 +17,7 @@ struct ClassifyArguments {
     uint16_t num_reads_to_fit {2000};
     uint8_t confidence_threshold{2};
     uint8_t min_hits{2};
+    std::string dist{"gamma"};
 
     // Output options
     bool run_extract {false};

@@ -245,7 +245,7 @@ public:
                 if (i == j)
                     probabilities_.at(j) *= result_pair.pos;
                 //else
-                //    probabilities_.at(j) *= result_pair.neg;
+                //    probabilities_.at(j) *= result_pair.g_neg;
             }
         }
         call_category(stats_model.confidence_threshold(), stats_model.min_num_hits());
