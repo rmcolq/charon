@@ -129,6 +129,23 @@ struct GammaParams
         const auto mu = mean(training_data);
         loc = mu - (shape * scale);
     }
+
+    double calculate_anderson_darling(std::vector<float> & training_data)
+    {
+        // in ascending order
+        sort(training_data.begin(), training_data.end());
+
+        auto n = training_data.size();
+        double S = 0;
+        for (auto i=0; i<training_data.size(); ++i)
+        {
+            auto F_y_i = stats::pgamma(training_data[i]-loc,shape, scale);
+            auto F_y_n1i = stats::pgamma(training_data[n-1-i]-loc,shape, scale);
+            auto s_i = ((2*i + 1)/n) * (std::log(F_y_i) + std::log(1-F_y_n1i));
+            S += s_i;
+        }
+        return -n-S;
+    }
 };
 
 struct BetaParams
@@ -167,6 +184,23 @@ struct BetaParams
         assert(beta > 0);
     }
 
+    double calculate_anderson_darling(std::vector<float> & training_data)
+    {
+        // in ascending order
+        sort(training_data.begin(), training_data.end());
+
+        auto n = training_data.size();
+        double S = 0;
+        for (auto i=0; i<training_data.size(); ++i)
+        {
+            auto F_y_i = stats::pbeta(training_data[i],alpha, beta);
+            auto F_y_n1i = stats::pbeta(training_data[n-1-i],alpha, beta);
+            auto s_i = ((2*i + 1)/n) * (std::log(F_y_i) + std::log(1-F_y_n1i));
+            S += s_i;
+        }
+        return -n-S;
+    }
+
 };
 
 struct ProbPair {
@@ -202,22 +236,26 @@ class Model
             assert(training_data.id == id);
             if (training_data.pos_complete ) {
                 g_pos.fit(training_data.pos);
+                auto ad = g_pos.calculate_anderson_darling(training_data.pos);
                 PLOG_INFO << "Model " << +id << " fit g_pos data with Gamma (shape:" << g_pos.shape << ", loc: 0, scale: "
-                          << g_pos.scale << ")";
+                          << g_pos.scale << "). Anderson-darling statistic is " << ad;
             } else {
-                PLOG_INFO << "Model " << +id << " using default for g_pos data with Gamma (shape:" << g_pos.shape << ", loc: 0, scale: " << g_pos.scale << ")";
+                auto ad = g_pos.calculate_anderson_darling(training_data.pos);
+                PLOG_INFO << "Model " << +id << " using default for g_pos data with Gamma (shape:" << g_pos.shape
+                          << ", loc: 0, scale: " << g_pos.scale << "). Anderson-darling statistic is " << ad;
             }
 
             if (training_data.neg_complete ) {
                 g_neg.fit(training_data.neg);
+                auto ad = g_neg.calculate_anderson_darling(training_data.neg);
                 PLOG_INFO << "Model " << +id << " fit g_neg data with Gamma (shape:" << g_neg.shape << ", loc: 0, scale: "
-                          << g_neg.scale << ")";
+                          << g_neg.scale << "). Anderson-darling statistic is " << ad;
             } else {
                 g_neg.fit_loc(training_data.neg);
-                PLOG_INFO << "Model " << +id << " using default for g_neg data with Gamma (shape:" << g_neg.shape << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale << ")";
+                auto ad = g_neg.calculate_anderson_darling(training_data.neg);
+                PLOG_INFO << "Model " << +id << " using default for g_neg data with Gamma (shape:" << g_neg.shape
+                          << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale << "). Anderson-darling statistic is " << ad;
             }
-            ready = true;
-            training_data.clear();
         }
 
         void train_beta(TrainingData & training_data)
@@ -225,23 +263,25 @@ class Model
             assert(training_data.id == id);
             if (training_data.pos_complete ) {
                 b_pos.fit(training_data.pos, true);
+                auto ad = b_pos.calculate_anderson_darling(training_data.pos);
                 PLOG_INFO << "Model " << +id << " fit pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
-                          << b_pos.beta << ")";
+                          << b_pos.beta << "). Anderson-darling statistic is " << ad;
             } else {
+                auto ad = b_pos.calculate_anderson_darling(training_data.pos);
                 PLOG_INFO << "Model " << +id << " using default for pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
-                          << b_pos.beta << ")";
+                          << b_pos.beta << "). Anderson-darling statistic is " << ad;
             }
 
             if (training_data.neg_complete ) {
                 b_neg.fit(training_data.neg, false);
+                auto ad = b_neg.calculate_anderson_darling(training_data.neg);
                 PLOG_INFO << "Model " << +id << " fit neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
-                          << b_neg.beta << ", loc: " << b_neg.loc << ")";
+                          << b_neg.beta << ", loc: " << b_neg.loc << "). Anderson-darling statistic is " << ad;
             } else {
+                auto ad = b_neg.calculate_anderson_darling(training_data.neg);
                 PLOG_INFO << "Model " << +id << " using default for neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
-                                             << b_neg.beta << ", loc: " << b_neg.loc << ")";
+                          << b_neg.beta << ", loc: " << b_neg.loc << "). Anderson-darling statistic is " << ad;
             }
-            ready = true;
-            training_data.clear();
         }
 
         void train(TrainingData & training_data)
