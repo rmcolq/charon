@@ -174,9 +174,12 @@ struct BetaParams
 
         alpha = mu*((mu*(1-mu)/var)-1);
         beta = (1-mu)*((mu*(1-mu)/var)-1);
+
+        // rough way to force support of negative beta to cover the region [0,0.2] - larger numbers narrow the supported peak
         if (beta > 85)
             beta = 85;
 
+        // rough way to force pos distribution to be right skewed
         if (is_pos and beta > alpha)
             alpha = beta;
 
@@ -305,6 +308,9 @@ class Model
                 p_pos = stats::dbeta(read_proportion, b_pos.alpha, b_pos.beta);
                 p_neg = stats::dbeta(read_proportion - b_neg.loc, b_neg.alpha, b_neg.beta);
             }
+            if (read_proportion == 1)
+                p_pos = 1;
+            
             const auto total = p_err + p_pos + p_neg;
             // Use Neyman Pearson Lemma
             return ProbPair(p_pos/total, (p_err + p_neg)/total);
