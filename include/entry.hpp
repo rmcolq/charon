@@ -44,7 +44,7 @@ public:
             read_id_(read_id),
             proportions_(summary.num_categories(),0),
             unique_proportions_(summary.num_categories(),0),
-            unique_counts_(summary.num_categories, 0),
+            unique_counts_(summary.num_categories(), 0),
             probabilities_(summary.num_categories(),1)
     {
         PLOG_DEBUG << "Initialize entry with read_id " << read_id << " and length " << length;
