@@ -65,7 +65,7 @@ public:
         return proportions_;
     }
 
-    std::vector<float> unique_proportions() const {
+    const std::vector<float>& unique_proportions() const {
         return unique_proportions_;
     }
 
@@ -180,7 +180,7 @@ public:
     void post_process(const InputSummary &summary) {
         get_max_bits(summary);
         get_counts();
-        //get_unique_proportions();
+        get_unique_proportions();
         get_proportions();
     }
 
