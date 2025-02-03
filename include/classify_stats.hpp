@@ -195,10 +195,10 @@ struct BetaParams
         {
             auto F_y_i = stats::pbeta(training_data[i],alpha, beta);
             auto F_y_n1i = stats::pbeta(training_data[n-1-i],alpha, beta);
-            auto s_i = ((2*i + 1)/n) * (std::log(F_y_i) + std::log(1-F_y_n1i));
+            auto s_i = ((2*i + 1)/(n-1)) * (std::log(F_y_i) + std::log(1-F_y_n1i));
             S += s_i;
         }
-        return -n-S;
+        return -n+1-S;
     }
 
 };
