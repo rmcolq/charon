@@ -21,6 +21,7 @@ private:
     std::unordered_map<uint8_t, std::vector<bool>> bits_; // this collects over all bins
     std::unordered_map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
     Counts<uint32_t> counts_;
+    std::vector<uint32_t> unique_counts_;
     std::vector<float> proportions_; // this collects over categories the proportion of all hashes which were from the given category
     std::vector<float> unique_proportions_; // this collects over categories the proportion of all hashes which were unique to the given category
     std::vector<double> probabilities_; // this collects over categories the probability of this read given the data come from that category
@@ -43,6 +44,7 @@ public:
             read_id_(read_id),
             proportions_(summary.num_categories(),0),
             unique_proportions_(summary.num_categories(),0),
+            unique_counts_(summary.num_categories, 0),
             probabilities_(summary.num_categories(),1)
     {
         PLOG_DEBUG << "Initialize entry with read_id " << read_id << " and length " << length;
@@ -150,11 +152,9 @@ public:
         return;
     };
 
-    void get_unique_proportions() {
-        PLOG_DEBUG << "collect_unique_proportions for read_id " << read_id_;
-        const auto num_categories = unique_proportions_.size();
-        assert(max_bits_.size() == num_categories);
-        std::vector<uint32_t> unique_counts(num_categories, 0);
+    void get_unique_counts() {
+        PLOG_DEBUG << "Collect unique counts for read_id " << read_id_;
+        const auto num_categories = max_bits_.size();
         std::vector<uint8_t> found;
         for (auto k = 0; k < num_hashes_; ++k) {
             found.clear();
@@ -168,11 +168,17 @@ public:
             }
             if (found.size() == 1) {
                 auto i = found.front();
-                unique_counts.at(i) += 1;
+                unique_counts_.at(i) += 1;
             }
         }
+
+    };
+
+    void get_unique_proportions() {
+        PLOG_DEBUG << "Collect unique proportions for read_id " << read_id_;
+        const auto num_categories = max_bits_.size();
         for (auto i = 0; i < num_categories; ++i) {
-            unique_proportions_.at(i) = static_cast< float >(unique_counts.at(i)) / static_cast< float >(num_hashes_);
+            unique_proportions_.at(i) = static_cast< float >(unique_counts_.at(i)) / static_cast< float >(num_hashes_);
         }
         return;
     };
@@ -180,6 +186,7 @@ public:
     void post_process(const InputSummary &summary) {
         get_max_bits(summary);
         get_counts();
+        get_unique_counts();
         get_unique_proportions();
         get_proportions();
     }
@@ -211,17 +218,22 @@ public:
             }
         }*/
 
+        auto raw_confidence = unique_counts_.at(first_pos) - unique_counts_.at(second_pos);
+        if (raw_confidence > std::numeric_limits<uint8_t>::max())
+            confidence_score_ = std::numeric_limits<uint8_t>::max();
+        else
+            confidence_score_ = static_cast<uint8_t>(raw_confidence);
+
         if (second == 0 and first > 0)
         {
             call_ = first_pos;
-            confidence_score_ = std::numeric_limits<uint8_t>::max();
         } else {
-            auto ratio = first/second;
+            /*auto ratio = first/second;
             PLOG_VERBOSE << "confidence score " << ratio << " from " << first << "/" << second;
             if (ratio < std::numeric_limits<uint8_t>::max())
                 confidence_score_ = static_cast<uint8_t>(ratio);
             else
-                confidence_score_ = std::numeric_limits<uint8_t>::max();
+                confidence_score_ = std::numeric_limits<uint8_t>::max();*/
             if (confidence_score_ > confidence_threshold)
                 call_ = first_pos;
         }

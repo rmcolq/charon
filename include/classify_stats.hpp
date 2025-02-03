@@ -310,7 +310,7 @@ class Model
             }
             if (read_proportion == 1)
                 p_pos = 1;
-            
+
             const auto total = p_err + p_pos + p_neg;
             // Use Neyman Pearson Lemma
             return ProbPair(p_pos/total, (p_err + p_neg)/total);
