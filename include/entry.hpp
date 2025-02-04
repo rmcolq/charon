@@ -199,7 +199,7 @@ public:
         uint8_t first_pos = 0;
         double second = probabilities_.at(1);
         uint8_t second_pos = 1;
-        if (second > first)
+        if (second > first or unique_counts_.at(second_pos) > unique_counts_.at(first_pos))
         {
             std::swap(first, second);
             std::swap(first_pos, second_pos);
@@ -224,8 +224,7 @@ public:
         else
             confidence_score_ = static_cast<uint8_t>(raw_confidence);
 
-        if (second == 0 and first > 0)
-        {
+        if (second == 0 and first > 0) {
             call_ = first_pos;
         } else {
             /*auto ratio = first/second;
