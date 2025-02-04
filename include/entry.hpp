@@ -199,7 +199,7 @@ public:
         uint8_t first_pos = 0;
         double second = probabilities_.at(1);
         uint8_t second_pos = 1;
-        if (second > first or unique_counts_.at(second_pos) > unique_counts_.at(first_pos))
+        if (unique_counts_.at(second_pos) > unique_counts_.at(first_pos))
         {
             std::swap(first, second);
             std::swap(first_pos, second_pos);
@@ -233,7 +233,7 @@ public:
                 confidence_score_ = static_cast<uint8_t>(ratio);
             else
                 confidence_score_ = std::numeric_limits<uint8_t>::max();*/
-            if (confidence_score_ > confidence_threshold)
+            if (confidence_score_ > confidence_threshold and first > second)
                 call_ = first_pos;
         }
 
