@@ -116,7 +116,7 @@ class Result
                     if (cached_reads_.size() < cached_reads_.capacity())
                     {
                         cached_reads_.emplace_back(ReadPair(record, read_entry));
-                        training_complete = stats_model_.add_read_to_training_data(read_entry.proportions());
+                        training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
                     } else {
                         stats_model_.force_ready();
                         training_complete = true;

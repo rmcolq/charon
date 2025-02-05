@@ -247,12 +247,12 @@ public:
 
     void classify(const StatsModel &stats_model) {
         PLOG_DEBUG << "Classify read " << read_id_;;
-        for (auto i = 0; i < proportions_.size(); ++i) {
-            const auto &read_proportion = proportions_.at(i);
+        for (auto i = 0; i < unique_proportions_.size(); ++i) {
+            const auto &read_proportion = unique_proportions_.at(i);
             const auto result_pair = stats_model.classify(i, read_proportion);
             PLOG_DEBUG << "Pos " << +i << " has read proportion " << read_proportion << " yielding probs "
                        << result_pair.pos << " and " << result_pair.neg << " for read " << read_id_;;
-            for (auto j = 0; j < proportions_.size(); ++j) {
+            for (auto j = 0; j < unique_proportions_.size(); ++j) {
                 if (i == j)
                     probabilities_.at(j) *= result_pair.pos;
                 //else
