@@ -431,20 +431,24 @@ class StatsModel
                     max_val = val;
                 }
             }
-            bool add_to_training = (pos_i != std::numeric_limits<uint8_t>::max() and num_above_threshold <= 1);
-            PLOG_VERBOSE << "add_to_training is " << add_to_training << " with hi g_pos " << +pos_i;
+            bool add_to_pos_training = (pos_i != std::numeric_limits<uint8_t>::max() and num_above_threshold <= 1);
+            PLOG_VERBOSE << "add_to_training is " << add_to_pos_training << " with hi g_pos " << +pos_i;
+            bool add_to_neg_training = (num_above_threshold == 0);
+            PLOG_VERBOSE << "add_to_neg_training is " << add_to_neg_training << " with hi g_pos " << +pos_i;
 
-            if (add_to_training) {
-                PLOG_VERBOSE << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
+            if (add_to_pos_training) {
+                PLOG_VERBOSE << " read_proportions size is " << read_proportions.size()
+                             << " and training data partition has size " << training_data_.size();
                 auto ready_to_train = training_data_.at(pos_i).add_pos(read_proportions[pos_i]);
-                if (ready_to_train and not models_[pos_i].ready){
+                if (ready_to_train and not models_[pos_i].ready) {
 #pragma omp critical(train_model)
                     train_model_at(pos_i);
                 }
-
+            }
+            if (add_to_neg_training) {
                 for (uint8_t i=0; i < read_proportions.size(); ++i) {
                     if (i != pos_i){
-                        ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
+                        auto ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
                         if (ready_to_train and not models_[i].ready) {
 #pragma omp critical(train_model)
                             train_model_at(i);
