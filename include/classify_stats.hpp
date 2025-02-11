@@ -328,6 +328,7 @@ class StatsModel
         float lo_hi_threshold_;
         int8_t confidence_threshold_;
         uint8_t min_hits_;
+        float min_proportion_difference_;
 
         std::vector<TrainingData> training_data_;
         std::vector<Model> models_;
@@ -343,7 +344,8 @@ class StatsModel
         StatsModel(const ClassifyArguments& opt, const InputSummary & summary):
                 lo_hi_threshold_(opt.lo_hi_threshold),
                 confidence_threshold_(opt.confidence_threshold),
-                min_hits_(opt.min_hits)
+                min_hits_(opt.min_hits),
+                min_proportion_difference_(opt.min_proportion_difference)
         {
             for (auto i=0; i<summary.num_categories(); ++i){
                 models_.emplace_back(Model(i, opt.dist));
@@ -389,6 +391,11 @@ class StatsModel
         uint8_t min_num_hits() const
         {
             return min_hits_;
+        }
+
+        float min_proportion_difference() const
+        {
+            return min_proportion_difference_;
         }
 
     void train_model_at(const uint8_t & i)

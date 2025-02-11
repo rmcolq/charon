@@ -191,7 +191,7 @@ public:
         get_proportions();
     }
 
-    void call_category(uint8_t confidence_threshold, uint8_t min_num_hits) {
+    void call_category(uint8_t confidence_threshold, uint8_t min_num_hits, float min_proportion_difference) {
         //TODO extend this to work with more than 2 categories
         assert(probabilities_.size() == 2);
 
@@ -243,6 +243,13 @@ public:
             PLOG_DEBUG << read_id_ << " has first count " << +first_count << " and second count " << +second_count << " which have differences less than " << +min_num_hits;
             call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this number of hits difference, then no call
         }
+
+        const auto & first_prop = proportions_.at(first_pos);
+        const auto & second_prop = proportions_.at(second_pos);
+        if (second_prop > first_prop or first_prop - second_prop < min_proportion_difference){
+            PLOG_DEBUG << read_id_ << " has first proportion " << first_prop << " and second proportion " << second_prop << " which have differences less than " << min_proportion_difference;
+            call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this level of discrepancy between the proportion hitting against each database don't call
+        }
     }
 
     void classify(const StatsModel &stats_model) {
@@ -259,7 +266,7 @@ public:
                 //    probabilities_.at(j) *= result_pair.g_neg;
             }
         }
-        call_category(stats_model.confidence_threshold(), stats_model.min_num_hits());
+        call_category(stats_model.confidence_threshold(), stats_model.min_num_hits(), stats_model.min_proportion_difference());
     }
 
     void print_result(const InputSummary &summary) {

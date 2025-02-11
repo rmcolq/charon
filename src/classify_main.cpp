@@ -58,6 +58,21 @@ void setup_classify_subcommand(CLI::App& app)
     classify_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
             ->type_name("STRING");
 
+    classify_subcommand
+            ->add_option("--confidence", opt->confidence_threshold, "Minimum difference between the top 2 unique hit counts.")
+            ->type_name("INT")
+            ->capture_default_str();
+
+    classify_subcommand
+            ->add_option("--min_hits", opt->confidence_threshold, "Minimum difference between the top 2 (non-unique) hit counts.")
+            ->type_name("INT")
+            ->capture_default_str();
+
+    classify_subcommand
+            ->add_option("--min_diff", opt->min_proportion_difference, "Minimum difference between the proportion of (non-unique) kmers found in each category.")
+            ->type_name("FLOAT")
+            ->capture_default_str();
+
     classify_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
             ->type_name("FILE");
