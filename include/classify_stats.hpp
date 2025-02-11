@@ -433,7 +433,7 @@ class StatsModel
             }
             bool add_to_pos_training = (pos_i != std::numeric_limits<uint8_t>::max() and num_above_threshold <= 1);
             PLOG_VERBOSE << "add_to_training is " << add_to_pos_training << " with hi g_pos " << +pos_i;
-            bool add_to_neg_training = (num_above_threshold == 0);
+            bool add_to_neg_training = add_to_pos_training or (num_above_threshold == 0);
             PLOG_VERBOSE << "add_to_neg_training is " << add_to_neg_training << " with hi g_pos " << +pos_i;
 
             if (add_to_pos_training) {
