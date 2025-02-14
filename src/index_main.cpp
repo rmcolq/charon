@@ -176,7 +176,7 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
     new_stats.num_files = stats.num_files;
 
     auto sorted_pairs = stats.bins_by_size();
-    auto max_num_hashes = sorted_pairs.back().second;
+    auto max_num_hashes = sorted_pairs.back().second / 2;
     PLOG_DEBUG << "Max hashes found for bin " << +sorted_pairs.back().first << " : " << max_num_hashes;
 
     uint8_t next_bin = 0;

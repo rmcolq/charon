@@ -22,10 +22,9 @@ InputSummary parse_input_file(const std::filesystem::path& input_file);
 
 InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary& summary);
 
-std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArguments& arguments, const InputSummary& summary, const InputStats& stats);
+std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArguments& opt, InputSummary& summary, InputStats& stats);
 
-Index build_index(const IndexArguments& opt, const InputSummary& summary, InputStats& stats);
-
+Index build_index(const IndexArguments& opt, const InputSummary& summary, InputStats& stats, const std::unordered_map<uint8_t, std::vector<uint8_t>>& bucket_to_bins_map);
 
 int index_main(IndexArguments & opt);
 

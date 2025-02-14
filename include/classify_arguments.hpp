@@ -13,11 +13,11 @@ struct ClassifyArguments {
     uint8_t chunk_size { 100 };
 
     // Stats options
-    float lo_hi_threshold {0.2};
+    float lo_hi_threshold {0.15};
     uint16_t num_reads_to_fit {5000};
     uint8_t confidence_threshold{0};
-    uint8_t min_hits{3};
-    float min_proportion_difference { 0.0 };
+    uint8_t min_hits{2};
+    float min_proportion_difference { 0.00 };
     std::string dist{"beta"};
 
     // Output options
