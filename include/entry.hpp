@@ -41,7 +41,7 @@ public:
 
     ~ReadEntry() = default;
 
-    ReadEntry(const std::string& read_id, const uint32_t& length, const double& mean_quality, const InputSummary &summary) :
+    ReadEntry(const std::string& read_id, const uint32_t& length, const float& mean_quality, const InputSummary &summary) :
             read_id_(read_id),
             mean_quality_(mean_quality),
             proportions_(summary.num_categories(),0),
