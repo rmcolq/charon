@@ -127,7 +127,11 @@ void classify_reads(const ClassifyArguments& opt, const Index& index){
                 continue;
             }
             auto qualities = record.base_qualities() | std::views::transform( [](auto quality) { return seqan3::to_phred(quality); });
-            auto mean_quality = std::accumulate(qualities.begin(), qualities.end(), 0) / std::ranges::size(qualities);
+            auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
+            auto mean_quality = 0;
+            if (std::ranges::size(qualities) > 0)
+                mean_quality = sum / std::ranges::size(qualities);
+            PLOG_VERBOSE << "Mean quality of read  " << record.id() << " is " << mean_quality;
 
             auto read = ReadEntry(read_id, read_length, mean_quality, result.input_summary());
             for (auto && value : record.sequence() | hash_adaptor) {
