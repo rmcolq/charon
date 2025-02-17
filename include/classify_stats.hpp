@@ -152,7 +152,7 @@ struct BetaParams
 {
     float alpha;
     float beta;
-    float loc;
+    float loc{0};
 
     BetaParams(const float & _alpha, const float & _beta):
             alpha{_alpha},
@@ -306,7 +306,7 @@ class Model
                 p_neg = stats::dgamma(read_proportion - g_neg.loc, g_neg.shape, g_neg.scale);
             } else {
                 p_pos = stats::dbeta(read_proportion, b_pos.alpha, b_pos.beta);
-                p_neg = stats::dbeta(read_proportion - b_neg.loc, b_neg.alpha, b_neg.beta);
+                p_neg = stats::dbeta(read_proportion, b_neg.alpha, b_neg.beta);
             }
             if (read_proportion == 1)
                 p_pos = 1;
