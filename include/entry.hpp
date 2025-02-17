@@ -16,6 +16,7 @@
 class ReadEntry {
 private:
     std::string read_id_;
+    float mean_quality_;
 
     uint32_t num_hashes_{0};
     std::unordered_map<uint8_t, std::vector<bool>> bits_; // this collects over all bins
@@ -40,8 +41,9 @@ public:
 
     ~ReadEntry() = default;
 
-    ReadEntry(const std::string& read_id, const uint32_t& length, const InputSummary &summary) :
+    ReadEntry(const std::string& read_id, const uint32_t& length, const uint8_t& mean_quality, const InputSummary &summary) :
             read_id_(read_id),
+            mean_quality_(mean_quality),
             proportions_(summary.num_categories(),0),
             unique_proportions_(summary.num_categories(),0),
             unique_counts_(summary.num_categories(), 0),
@@ -191,7 +193,7 @@ public:
         get_proportions();
     }
 
-    void call_category(uint8_t confidence_threshold, uint8_t min_num_hits, float min_proportion_difference) {
+    void call_category(const float& min_quality, const uint8_t& confidence_threshold, const uint8_t& min_num_hits, const float& min_proportion_difference) {
         //TODO extend this to work with more than 2 categories
         assert(probabilities_.size() == 2);
 
@@ -223,6 +225,10 @@ public:
             confidence_score_ = std::numeric_limits<uint8_t>::max();
         else
             confidence_score_ = static_cast<uint8_t>(raw_confidence);
+
+        if (mean_quality_ < min_quality){
+            return;
+        }
 
         if (second == 0 and first > 0) {
             call_ = first_pos;
@@ -266,7 +272,7 @@ public:
                 //    probabilities_.at(j) *= result_pair.g_neg;
             }
         }
-        call_category(stats_model.confidence_threshold(), stats_model.min_num_hits(), stats_model.min_proportion_difference());
+        call_category(stats_model.min_quality(), stats_model.confidence_threshold(), stats_model.min_num_hits(), stats_model.min_proportion_difference());
     }
 
     void print_result(const InputSummary &summary) {
@@ -303,8 +309,8 @@ public:
             std::cout << "U" << "\t";
         else
             std::cout << "C" << "\t";
-        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << num_hashes_ << "\t" << +confidence_score_ << "\t" ;
         std::cout.precision(6);
+        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" ;
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_(i, i) << ":" << proportions_.at(i)
                       << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";

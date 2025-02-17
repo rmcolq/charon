@@ -119,11 +119,17 @@ void classify_reads(const ClassifyArguments& opt, const Index& index){
             const auto read_id = split(record.id(), " ")[0];
             const auto read_length = record.sequence().size();
             if (read_length > std::numeric_limits<uint32_t>::max()){
-                PLOG_INFO << "Ignoring read " << record.id() << " as too long!";
+                PLOG_WARNING << "Ignoring read " << record.id() << " as too long!";
                 continue;
             }
+            if (read_length == 0){
+                PLOG_WARNING << "Ignoring read " << record.id() << " as has zero length!";
+                continue;
+            }
+            auto qualities = record.base_qualities() | std::views::transform( [](auto quality) { return seqan3::to_phred(quality); });
+            auto mean_quality = std::accumulate(qualities.begin(), qualities.end(), 0) / std::ranges::size(qualities);
 
-            auto read = ReadEntry(read_id, read_length, result.input_summary());
+            auto read = ReadEntry(read_id, read_length, mean_quality, result.input_summary());
             for (auto && value : record.sequence() | hash_adaptor) {
                 const auto & entry = agent.bulk_contains(value);
                 read.update_entry(entry);

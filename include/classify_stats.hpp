@@ -326,6 +326,7 @@ class StatsModel
         bool ready_ {false};
 
         float lo_hi_threshold_;
+        float min_quality_;
         int8_t confidence_threshold_;
         uint8_t min_hits_;
         float min_proportion_difference_;
@@ -343,6 +344,7 @@ class StatsModel
 
         StatsModel(const ClassifyArguments& opt, const InputSummary & summary):
                 lo_hi_threshold_(opt.lo_hi_threshold),
+                min_quality_(opt.min_quality),
                 confidence_threshold_(opt.confidence_threshold),
                 min_hits_(opt.min_hits),
                 min_proportion_difference_(opt.min_proportion_difference)
@@ -381,6 +383,11 @@ class StatsModel
                     return;
             }
             ready_ = true;
+        }
+
+        float min_quality() const
+        {
+            return min_quality_;
         }
 
         int8_t confidence_threshold() const
