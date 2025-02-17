@@ -128,7 +128,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index){
             }
             auto qualities = record.base_qualities() | std::views::transform( [](auto quality) { return seqan3::to_phred(quality); });
             auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
-            auto mean_quality = 0;
+            double mean_quality = 0;
             if (std::ranges::size(qualities) > 0)
                 mean_quality = sum / std::ranges::size(qualities);
             PLOG_VERBOSE << "Mean quality of read  " << record.id() << " is " << mean_quality;
