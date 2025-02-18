@@ -220,7 +220,7 @@ class Model
         GammaParams g_pos{25, 0, 0.02};
         GammaParams g_neg{10, 0, 0.005};
         BetaParams b_pos{6,4};
-        BetaParams b_neg{5,80};
+        BetaParams b_neg{6,40};
     public:
         Model() = default;
         Model(Model const &) = default;
