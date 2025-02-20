@@ -12,7 +12,7 @@ struct ClassifyArguments {
     std::string db;
     uint8_t chunk_size { 100 };
 
-    float min_quality { 6.0 };
+    float min_quality { 10.0 };
 
     // Stats options
     float lo_hi_threshold {0.15};
