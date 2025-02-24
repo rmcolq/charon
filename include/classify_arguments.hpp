@@ -9,6 +9,8 @@
 struct ClassifyArguments {
     // IO options
     std::filesystem::path read_file;
+    std::filesystem::path read_file2;
+    bool is_paired { false };
     std::string db;
     uint8_t chunk_size { 100 };
 
@@ -29,6 +31,7 @@ struct ClassifyArguments {
     bool run_extract {false};
     std::string category_to_extract;
     std::filesystem::path extract_file;
+    std::filesystem::path extract_file2;
 
     // General options
     std::string log_file {"charon.log"};
@@ -54,7 +57,6 @@ struct ClassifyArguments {
         ss += "\tconfidence_threshold:\t" + std::to_string(confidence_threshold) + "\n";
         ss += "\tmin_hits:\t\t" + std::to_string(min_hits) + "\n";
         ss += "\tmin_diff:\t\t" + std::to_string(min_proportion_difference) + "\n\n";
-
 
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
         ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";

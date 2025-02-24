@@ -7,6 +7,7 @@
 
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 #include <seqan3/io/sequence_file/output.hpp>
+#include <utility>
 #include <plog/Log.h>
 
 #include "entry.hpp"
@@ -25,10 +26,11 @@ struct ResultSummary
 };
 
 template<class record_type>
-struct ReadPair
-{
-    record_type record;
+struct ReadRecord {
+    bool is_paired;
     ReadEntry read;
+    record_type record;
+    record_type record2;
 };
 
 template<class record_type, class outfile_field_ids, class outfile_format>
@@ -38,11 +40,12 @@ class Result
         InputSummary input_summary_;
         ResultSummary result_summary_;
         StatsModel stats_model_;
-        std::vector<ReadPair<record_type>> cached_reads_;
+        std::vector<ReadRecord<record_type>> cached_reads_;
 
         bool run_extract_;
         uint8_t extract_category_;
         seqan3::sequence_file_output<outfile_field_ids, outfile_format> extract_handle_;
+        seqan3::sequence_file_output<outfile_field_ids, outfile_format> extract_handle2_;
 
     public:
         Result() = default;
@@ -56,11 +59,15 @@ class Result
                 input_summary_{summary},
                 result_summary_(summary.num_categories()),
                 run_extract_(opt.run_extract),
-                extract_handle_{std::cout, seqan3::format_fasta{}}
+                extract_handle_{std::cout, seqan3::format_fasta{}},
+                extract_handle2_{std::cout, seqan3::format_fasta{}}
         {
             stats_model_ = StatsModel(opt, summary);
             if (opt.run_extract){
                 extract_handle_ = seqan3::sequence_file_output{opt.extract_file};
+                if (opt.is_paired)
+                    extract_handle2_ = seqan3::sequence_file_output{opt.extract_file2};
+
                 extract_category_ = category_index(opt.category_to_extract);
             }
             cached_reads_.reserve(opt.num_reads_to_fit*summary.num_categories()*4);
@@ -99,7 +106,15 @@ class Result
         void extract_read(const record_type& record)
         {
 #pragma omp critical(extract_read)
+            extract_handle_.push_back(record);
+        }
+
+        void extract_paired_read(const record_type& record, const record_type& record2)
+        {
+#pragma omp critical(extract_read)
                 extract_handle_.push_back(record);
+#pragma omp critical(extract_read2)
+                extract_handle2_.push_back(record2);
         }
 
         void add_read(ReadEntry& read_entry, const record_type& record){
@@ -115,7 +130,33 @@ class Result
                     bool training_complete = false;
                     if (cached_reads_.size() < cached_reads_.capacity())
                     {
-                        cached_reads_.emplace_back(ReadPair(record, read_entry));
+                        cached_reads_.emplace_back(ReadRecord(false, read_entry, record, record));
+                        training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
+                    } else {
+                        stats_model_.force_ready();
+                        training_complete = true;
+                    }
+
+                    if (training_complete)
+                        classify_cache();
+                }
+            }
+        }
+
+        void add_paired_read(ReadEntry& read_entry, const record_type& record, const record_type& record2){
+            if (stats_model_.ready()) {
+                auto read_to_extract = classify_read(read_entry);
+                if (run_extract_ and read_to_extract){
+                    extract_paired_read(record, record2);
+                }
+            } else {
+                PLOG_VERBOSE << "Add read " << read_entry.read_id() << " to training ";
+#pragma omp critical(add_to_cache)
+                {
+                    bool training_complete = false;
+                    if (cached_reads_.size() < cached_reads_.capacity())
+                    {
+                        cached_reads_.emplace_back(ReadRecord(true, read_entry, record, record2));
                         training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
                     } else {
                         stats_model_.force_ready();
@@ -132,13 +173,19 @@ class Result
         {
             PLOG_VERBOSE << "Classify cached reads";
 
-            for (auto read_pair : cached_reads_)
+            for (auto read_record : cached_reads_)
             {
-                auto & read_entry = read_pair.read;
-                const auto & record = read_pair.record;
+                auto & read_entry = read_record.read;
+                const auto & record = read_record.record;
                 bool read_to_extract = classify_read(read_entry);
                 if (run_extract_ and read_to_extract){
-                    extract_read(record);
+                    if (read_record.is_paired)
+                    {
+                        const auto & record2 = read_record.record2;
+                        extract_paired_read(record, record2);
+                    } else {
+                        extract_read(record);
+                    }
                 }
             }
             cached_reads_.resize(0);
