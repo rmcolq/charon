@@ -40,8 +40,8 @@ public:
     }
     const T& operator()(size_t row, size_t col) const
     {
-        assert(row > 0 && row < mRows);
-        assert(col > 0 && row < mRows);
+        assert(row >= 0 && row < mRows);
+        assert(col >= 0 && row < mRows);
         return mData[row * (row + 1) / 2 + col];
     }
     size_t rows() const noexcept

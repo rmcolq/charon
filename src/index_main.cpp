@@ -10,6 +10,7 @@
 #include "index.hpp"
 #include "store_index.hpp"
 #include "input_summary.hpp"
+#include "version.h"
 
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
@@ -72,7 +73,6 @@ void setup_index_subcommand(CLI::App& app)
 
 
 InputSummary parse_input_file(const std::filesystem::path& input_file){
-    std::cout << "Parsing input file " << std::endl;
     PLOG_INFO << "Parsing input file " << input_file;
     InputSummary summary;
     uint8_t next_bin = 0;
@@ -110,7 +110,6 @@ InputSummary parse_input_file(const std::filesystem::path& input_file){
     summary.categories.insert(summary.categories.end(), categories.begin(), categories.end());
 
     PLOG_INFO << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories";
-    std::cout << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories() << " categories";
 
     return summary;
 }
@@ -124,6 +123,7 @@ InputStats count_and_store_hashes(const IndexArguments& opt, const InputSummary&
     PLOG_DEBUG << "Defined stats";
 
     const auto max_num_hashes = max_num_hashes_for_fpr(opt);
+    PLOG_INFO << "Maximum hashes permitted per bin for fpr rate " << opt.max_fpr << " is " << max_num_hashes;
 
 #pragma omp parallel for num_threads(opt.threads)
     for (const auto pair : summary.filepath_to_bin) {
@@ -176,7 +176,7 @@ std::unordered_map<uint8_t, std::vector<uint8_t>> optimize_layout(const IndexArg
     new_stats.num_files = stats.num_files;
 
     auto sorted_pairs = stats.bins_by_size();
-    auto max_num_hashes = sorted_pairs.back().second;
+    auto max_num_hashes = sorted_pairs.back().second / 2;
     PLOG_DEBUG << "Max hashes found for bin " << +sorted_pairs.back().first << " : " << max_num_hashes;
 
     uint8_t next_bin = 0;
@@ -241,7 +241,7 @@ Index build_index(const IndexArguments& opt, const InputSummary& summary, InputS
                                              seqan3::hash_function_count{opt.num_hash}};
 
 #pragma omp parallel for
-    for ( auto bucket=0; bucket<summary.num_bins; ++bucket ) {
+    for ( uint8_t bucket=0; bucket<summary.num_bins; ++bucket ) {
         const auto & bins = bucket_to_bins_map.at(bucket);
         for (auto const & bin : bins){
             const auto& hashes = load_hashes( std::to_string(bin), opt.tmp_dir );
@@ -288,7 +288,9 @@ int index_main(IndexArguments & opt)
     }
     std::filesystem::create_directory(opt.tmp_dir);
 
-    LOG_INFO << "Running charon index!";
+    auto args = opt.to_string();
+    LOG_INFO << "Running charon index\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
+
 
     auto summary = parse_input_file(opt.input_file);
     auto stats = count_and_store_hashes(opt, summary);

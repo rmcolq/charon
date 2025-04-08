@@ -4,7 +4,7 @@
 
 #include "index_main.hpp"
 #include "classify_main.hpp"
-#include "version.hpp"
+#include "version.h.in"
 
 class MyFormatter : public CLI::Formatter {
 public:
@@ -52,7 +52,7 @@ int main(int argc, char* argv[])
     CLI::App app { "Charon: Categorize reads into a small number of classes." };
     app.formatter(std::make_shared<MyFormatter>());
     app.add_flag_callback("-V,--version", []() {
-        std::cout << "charon version " << CHARON_VERSION << std::endl;
+        std::cout << "Charon version: " << SOFTWARE_VERSION << std::endl;
         throw(CLI::Success {});
     });
     setup_index_subcommand(app);

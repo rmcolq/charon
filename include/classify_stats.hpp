@@ -21,6 +21,14 @@ double mean(const auto & v) {
     return v.empty() ? 0 : sum / v.size();
 }
 
+double variance(const auto & v, const auto & mean) {
+    auto variance_func = [&mean](float accumulator, const float& val) {
+        return accumulator + ((val - mean)*(val - mean));
+    };
+    double sum = std::accumulate(std::begin(v), std::end(v), 0.0, variance_func);
+    return v.size() <= 1 ? 0 : sum / (v.size() - 1);
+}
+
 class TrainingData
 {
     private:
@@ -65,7 +73,7 @@ class TrainingData
             } else {
                 check_status();
             }
-            PLOG_VERBOSE << "Add to pos results in pos size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
+            PLOG_VERBOSE << "Add to g_pos results in g_pos size " << pos.size() << " and g_neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 
@@ -76,7 +84,7 @@ class TrainingData
             } else {
                 check_status();
             }
-            PLOG_VERBOSE << "Add to neg results in pos size " << pos.size() << " and neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
+            PLOG_VERBOSE << "Add to g_neg results in g_pos size " << pos.size() << " and g_neg size " << neg.size() << " with status " << pos_complete << neg_complete << complete;
             return complete;
         };
 
@@ -115,6 +123,87 @@ struct GammaParams
         shape = (3 - s + std::sqrt((s-3)*(s-3) + 24*s))/(12*s);
         scale = mu / shape;
     }
+
+    void fit_loc(const std::vector<float> & training_data)
+    {
+        const auto mu = mean(training_data);
+        loc = mu - (shape * scale);
+    }
+
+    double calculate_anderson_darling(std::vector<float> & training_data)
+    {
+        // in ascending order
+        sort(training_data.begin(), training_data.end());
+
+        auto n = training_data.size();
+        double S = 0;
+        for (auto i=0; i<training_data.size(); ++i)
+        {
+            auto F_y_i = stats::pgamma(training_data[i]-loc,shape, scale);
+            auto F_y_n1i = stats::pgamma(training_data[n-1-i]-loc,shape, scale);
+            auto s_i = ((2*i + 1)/n) * (std::log(F_y_i) + std::log(1-F_y_n1i));
+            S += s_i;
+        }
+        return -n-S;
+    }
+};
+
+struct BetaParams
+{
+    float alpha;
+    float beta;
+    float loc{0};
+
+    BetaParams(const float & _alpha, const float & _beta):
+            alpha{_alpha},
+            beta{_beta}
+    {};
+
+    void fit_loc(const std::vector<float> & training_data)
+    {
+        const auto mu = mean(training_data);
+        loc = mu - alpha/(alpha + beta);
+    }
+
+    void fit (const std::vector<float> & training_data, bool is_pos)
+    {
+        const auto mu = mean(training_data);
+        const auto var = variance(training_data, mu);
+        PLOG_INFO << "Fitting Beta to data with mean " << mu << " and sample variance " << var;
+        assert(var < mu*(1-mu));
+
+        alpha = mu*((mu*(1-mu)/var)-1);
+        beta = (1-mu)*((mu*(1-mu)/var)-1);
+
+        // rough way to force support of negative beta to cover the region [0,0.2] - larger numbers narrow the supported peak
+        //if (beta > 85)
+        //    beta = 85;
+
+        // rough way to force pos distribution to be right skewed
+        //if (is_pos and beta > alpha)
+        //    alpha = beta;
+
+        assert(alpha > 0);
+        assert(beta > 0);
+    }
+
+    double calculate_anderson_darling(std::vector<float> & training_data)
+    {
+        // in ascending order
+        sort(training_data.begin(), training_data.end());
+
+        auto n = training_data.size();
+        double S = 0;
+        for (auto i=0; i<training_data.size(); ++i)
+        {
+            auto F_y_i = stats::pbeta(training_data[i],alpha, beta);
+            auto F_y_n1i = stats::pbeta(training_data[n-1-i],alpha, beta);
+            auto s_i = ((2*i + 1)/(n-1)) * (std::log(F_y_i) + std::log(1-F_y_n1i));
+            S += s_i;
+        }
+        return -n+1-S;
+    }
+
 };
 
 struct ProbPair {
@@ -127,8 +216,11 @@ class Model
     private:
         uint8_t id;
         bool ready {false};
-        GammaParams pos{25,0,0.02};
-        GammaParams neg{10,0,0.005};
+        std::string dist{"gamma"};
+        GammaParams g_pos{25, 0, 0.02};
+        GammaParams g_neg{10, 0, 0.005};
+        BetaParams b_pos{6,4};
+        BetaParams b_neg{6,40};
     public:
         Model() = default;
         Model(Model const &) = default;
@@ -137,37 +229,90 @@ class Model
         Model & operator=(Model &&) = default;
         ~Model() = default;
 
-        Model(const uint8_t i):
-            id{i}
+        Model(const uint8_t i, const std::string& d):
+            id{i},
+            dist{d}
         {};
+
+        void train_gamma(TrainingData & training_data)
+        {
+            assert(training_data.id == id);
+            if (training_data.pos_complete ) {
+                g_pos.fit(training_data.pos);
+                auto ad = g_pos.calculate_anderson_darling(training_data.pos);
+                PLOG_INFO << "Model " << +id << " fit g_pos data with Gamma (shape:" << g_pos.shape << ", loc: 0, scale: "
+                          << g_pos.scale << "). Anderson-darling statistic is " << ad;
+            } else {
+                auto ad = g_pos.calculate_anderson_darling(training_data.pos);
+                PLOG_INFO << "Model " << +id << " using default for g_pos data with Gamma (shape:" << g_pos.shape
+                          << ", loc: 0, scale: " << g_pos.scale << "). Anderson-darling statistic is " << ad;
+            }
+
+            if (training_data.neg_complete ) {
+                g_neg.fit(training_data.neg);
+                auto ad = g_neg.calculate_anderson_darling(training_data.neg);
+                PLOG_INFO << "Model " << +id << " fit g_neg data with Gamma (shape:" << g_neg.shape << ", loc: 0, scale: "
+                          << g_neg.scale << "). Anderson-darling statistic is " << ad;
+            } else {
+                g_neg.fit_loc(training_data.neg);
+                auto ad = g_neg.calculate_anderson_darling(training_data.neg);
+                PLOG_INFO << "Model " << +id << " using default for g_neg data with Gamma (shape:" << g_neg.shape
+                          << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale << "). Anderson-darling statistic is " << ad;
+            }
+        }
+
+        void train_beta(TrainingData & training_data)
+        {
+            assert(training_data.id == id);
+            if (training_data.pos_complete ) {
+                b_pos.fit(training_data.pos, true);
+                auto ad = b_pos.calculate_anderson_darling(training_data.pos);
+                PLOG_INFO << "Model " << +id << " fit pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
+                          << b_pos.beta << "). Anderson-darling statistic is " << ad;
+            } else {
+                auto ad = b_pos.calculate_anderson_darling(training_data.pos);
+                PLOG_INFO << "Model " << +id << " using default for pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
+                          << b_pos.beta << "). Anderson-darling statistic is " << ad;
+            }
+
+            if (training_data.neg_complete ) {
+                b_neg.fit(training_data.neg, false);
+                auto ad = b_neg.calculate_anderson_darling(training_data.neg);
+                PLOG_INFO << "Model " << +id << " fit neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
+                          << b_neg.beta << ", loc: " << b_neg.loc << "). Anderson-darling statistic is " << ad;
+            } else {
+                auto ad = b_neg.calculate_anderson_darling(training_data.neg);
+                PLOG_INFO << "Model " << +id << " using default for neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
+                          << b_neg.beta << ", loc: " << b_neg.loc << "). Anderson-darling statistic is " << ad;
+            }
+        }
 
         void train(TrainingData & training_data)
         {
             assert(training_data.id == id);
-            if (training_data.pos_complete ) {
-                pos.fit(training_data.pos);
-                PLOG_INFO << "Model " << +id << " fit pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "
-                          << pos.scale << ")";
-            } else {
-                PLOG_INFO << "Model " << +id << " using default for pos data with Gamma (shape:" << pos.shape <<", loc: 0, scale: "<< pos.scale << ")";
-            }
-
-            if (training_data.neg_complete ) {
-                neg.fit(training_data.neg);
-                PLOG_INFO << "Model " << +id << " fit neg data with Gamma (shape:" << neg.shape << ", loc: 0, scale: "
-                          << neg.scale << ")";
-            } else {
-                PLOG_INFO << "Model " << +id << " using default for neg data with Gamma (shape:" << neg.shape <<", loc: 0, scale: "<< neg.scale << ")";
-            }
+            if (dist == "beta")
+                train_beta(training_data);
+            else
+                train_gamma(training_data);
             ready = true;
             training_data.clear();
         }
 
         ProbPair prob(const float & read_proportion) const {
-            const auto p_err = stats::dexp(read_proportion,1000);
-            const auto p_pos = stats::dgamma(read_proportion,pos.shape,pos.scale);
-            const auto p_neg = stats::dgamma(read_proportion,neg.shape,neg.scale);
+            const auto p_err = stats::dexp(read_proportion,300);
+            float p_pos, p_neg;
+            if ( dist == "gamma") {
+                p_pos = stats::dgamma(read_proportion - g_pos.loc, g_pos.shape, g_pos.scale);
+                p_neg = stats::dgamma(read_proportion - g_neg.loc, g_neg.shape, g_neg.scale);
+            } else {
+                p_pos = stats::dbeta(read_proportion, b_pos.alpha, b_pos.beta);
+                p_neg = stats::dbeta(read_proportion, b_neg.alpha, b_neg.beta);
+            }
+            if (read_proportion == 1)
+                p_pos = 1;
+
             const auto total = p_err + p_pos + p_neg;
+            // Use Neyman Pearson Lemma
             return ProbPair(p_pos/total, (p_err + p_neg)/total);
         }
 
@@ -181,8 +326,12 @@ class StatsModel
         bool ready_ {false};
 
         float lo_hi_threshold_;
+
+        float min_quality_;
+        uint32_t min_length_;
         int8_t confidence_threshold_;
         uint8_t min_hits_;
+        float min_proportion_difference_;
 
         std::vector<TrainingData> training_data_;
         std::vector<Model> models_;
@@ -197,11 +346,14 @@ class StatsModel
 
         StatsModel(const ClassifyArguments& opt, const InputSummary & summary):
                 lo_hi_threshold_(opt.lo_hi_threshold),
+                min_quality_(opt.min_quality),
+                min_length_(opt.min_length),
                 confidence_threshold_(opt.confidence_threshold),
-                min_hits_(opt.min_hits)
+                min_hits_(opt.min_hits),
+                min_proportion_difference_(opt.min_proportion_difference)
         {
             for (auto i=0; i<summary.num_categories(); ++i){
-                models_.emplace_back(Model(i));
+                models_.emplace_back(Model(i, opt.dist));
                 training_data_.emplace_back(TrainingData(opt, i));
             }
             PLOG_DEBUG << "Initialize stats model with " << training_data_.size() << " sets of training data ";
@@ -236,6 +388,16 @@ class StatsModel
             ready_ = true;
         }
 
+        float min_quality() const
+        {
+            return min_quality_;
+        }
+
+        uint32_t min_length() const
+        {
+            return min_length_;
+        }
+
         int8_t confidence_threshold() const
         {
             return confidence_threshold_;
@@ -244,6 +406,11 @@ class StatsModel
         uint8_t min_num_hits() const
         {
             return min_hits_;
+        }
+
+        float min_proportion_difference() const
+        {
+            return min_proportion_difference_;
         }
 
     void train_model_at(const uint8_t & i)
@@ -279,20 +446,24 @@ class StatsModel
                     max_val = val;
                 }
             }
-            bool add_to_training = (pos_i != std::numeric_limits<uint8_t>::max() and num_above_threshold <= 1);
-            PLOG_VERBOSE << "add_to_training is " << add_to_training << " with hi pos " << +pos_i;
+            bool add_to_pos_training = (pos_i != std::numeric_limits<uint8_t>::max() and num_above_threshold == 1);
+            PLOG_VERBOSE << "add_to_training is " << add_to_pos_training << " with hi g_pos " << +pos_i;
+            bool add_to_neg_training = add_to_pos_training or (num_above_threshold == 0);
+            PLOG_VERBOSE << "add_to_neg_training is " << add_to_neg_training << " with hi g_pos " << +pos_i;
 
-            if (add_to_training) {
-                PLOG_VERBOSE << " read_proportions size is " << read_proportions.size() << " and training data partition has size " << training_data_.size();
+            if (add_to_pos_training) {
+                PLOG_VERBOSE << " read_proportions size is " << read_proportions.size()
+                             << " and training data partition has size " << training_data_.size();
                 auto ready_to_train = training_data_.at(pos_i).add_pos(read_proportions[pos_i]);
-                if (ready_to_train and not models_[pos_i].ready){
+                if (ready_to_train and not models_[pos_i].ready) {
 #pragma omp critical(train_model)
                     train_model_at(pos_i);
                 }
-
+            }
+            if (add_to_neg_training) {
                 for (uint8_t i=0; i < read_proportions.size(); ++i) {
                     if (i != pos_i){
-                        ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
+                        auto ready_to_train = training_data_.at(i).add_neg(read_proportions[i]);
                         if (ready_to_train and not models_[i].ready) {
 #pragma omp critical(train_model)
                             train_model_at(i);

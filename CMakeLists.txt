@@ -3,7 +3,14 @@
 # =============================================================================
 set(PROJECT_NAME_STR charon)
 cmake_minimum_required( VERSION 3.9 FATAL_ERROR )
-project( ${PROJECT_NAME_STR} VERSION 0.0.1 LANGUAGES CXX )
+
+add_custom_target(version
+        ${CMAKE_COMMAND} -D SRC=${CMAKE_SOURCE_DIR}/include/version.h.in
+        -D DST=${CMAKE_SOURCE_DIR}/include/version.h
+        -P ${CMAKE_SOURCE_DIR}/cmake/GenerateVersion.cmake
+)
+
+project( ${PROJECT_NAME_STR} LANGUAGES CXX )
 
 # Use C++20
 set(CMAKE_CXX_STANDARD 20)
@@ -37,6 +44,8 @@ CPMGetPackage (seqan3)
 CPMGetPackage (plog)
 CPMGetPackage (gcem)
 CPMGetPackage (statslib)
+CPMGetPackage (bzip2)
+CPMGetPackage (zlib)
 
 # -----------------------------------------------------------------------------
 # install
@@ -48,6 +57,8 @@ include_directories(
         ${PROJECT_SOURCE_DIR}/lib/include
         ${gcem_SOURCE_DIR}/include
         ${statslib_SOURCE_DIR}/include
+        ${bzip2_SOURCE_DIR}
+        ${zlib_SOURCE_DIR}
 )
 
 file(GLOB_RECURSE SRC_FILES
@@ -57,6 +68,8 @@ file(GLOB_RECURSE SRC_FILES
 add_executable(${PROJECT_NAME} ${SRC_FILES}
         src/main.cpp
 )
+
+add_dependencies(${PROJECT_NAME} version)
 
 target_link_libraries(${PROJECT_NAME} PRIVATE seqan3::seqan3 plog::plog OpenMP::OpenMP_CXX)
 

@@ -6,20 +6,46 @@
 #include <string>
 
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
+#include <seqan3/io/sequence_file/output.hpp>
+#include <utility>
 #include <plog/Log.h>
 
 #include "entry.hpp"
 #include "input_summary.hpp"
 #include "classify_stats.hpp"
 
+struct ResultSummary
+{
+    std::vector<uint64_t> classified_counts;
+    uint64_t unclassified_count{0};
+    uint64_t extracted_count{0};
 
+    ResultSummary(const uint8_t size):
+            classified_counts(size,0)
+    {};
+};
+
+template<class record_type>
+struct ReadRecord {
+    bool is_paired;
+    ReadEntry read;
+    record_type record;
+    record_type record2;
+};
+
+template<class record_type, class outfile_field_ids, class outfile_format>
 class Result
 {
     private:
-        InputSummary summary_;
-        std::unordered_map<std::string, ReadEntry> entries;
-        StatsModel stats_model;
-        std::vector<std::string> cached_read_ids;
+        InputSummary input_summary_;
+        ResultSummary result_summary_;
+        StatsModel stats_model_;
+        std::vector<ReadRecord<record_type>> cached_reads_;
+
+        bool run_extract_;
+        uint8_t extract_category_;
+        seqan3::sequence_file_output<outfile_field_ids, outfile_format> extract_handle_;
+        seqan3::sequence_file_output<outfile_field_ids, outfile_format> extract_handle2_;
 
     public:
         Result() = default;
@@ -30,87 +56,84 @@ class Result
         ~Result() = default;
 
         Result(const ClassifyArguments& opt, const InputSummary & summary):
-            summary_{summary}
+                input_summary_{summary},
+                result_summary_(summary.num_categories()),
+                run_extract_(opt.run_extract),
+                extract_handle_{std::cout, seqan3::format_fasta{}},
+                extract_handle2_{std::cout, seqan3::format_fasta{}}
         {
-            stats_model = StatsModel(opt, summary);
-            entries.reserve(250000);
-            cached_read_ids.reserve(opt.num_reads_to_fit*summary.num_categories()*4);
+            stats_model_ = StatsModel(opt, summary);
+            if (opt.run_extract){
+                extract_handle_ = seqan3::sequence_file_output{opt.extract_file};
+                if (opt.is_paired)
+                    extract_handle2_ = seqan3::sequence_file_output{opt.extract_file2};
+
+                extract_category_ = category_index(opt.category_to_extract);
+            }
+            cached_reads_.reserve(opt.num_reads_to_fit*summary.num_categories()*4);
+
         };
 
-        void check_entries_size( const uint8_t chunk_size)
+        const InputSummary& input_summary() const
         {
-            entries.reserve(entries.size() + 3*chunk_size );
+            return input_summary_;
         }
 
-        uint8_t category_index(const std::string& category)
+        const uint8_t category_index(const std::string& category) const
         {
-            return summary_.category_index(category);
+            return input_summary_.category_index(category);
         }
 
-        uint8_t call(const std::string& read_id)
+        bool classify_read(ReadEntry& read_entry)
         {
-            PLOG_VERBOSE << "Check call for read " << read_id;
-            return entries.at(read_id).call();
-        }
-
-        void add_read(const std::string read_id, const uint32_t length){
-            if (entries.find(read_id) == entries.end()){
-                PLOG_VERBOSE << "Define entry for " << read_id << " with length " << length;
-    #pragma omp critical(add_read_id_to_entries)
-                entries.emplace(read_id,ReadEntry(read_id, length, summary_));
-            }
-            assert (entries.find(read_id) != entries.end());
-        }
-
-        void update_read(const std::string read_id, const auto & entry){
-            /*std::cout << read_id << " ";
-            for (const auto i : entry){
-                std:: cout << +i;
-            }
-            std::cout << std::endl;*/
-            assert (entries.find(read_id) != entries.end());
-            entries.at(read_id).update_entry(entry);
-        };
-
-        void classify_read(const std::string & read_id)
-        {
-            PLOG_VERBOSE << "Classify " << read_id;
-            entries.at(read_id).classify(stats_model);
-            PLOG_VERBOSE << "Print " << read_id;
-#pragma omp critical
-            entries.at(read_id).print_assignment_result(summary_);
-        }
-
-        void classify_cache()
-        {
-            for (const auto & read_id : cached_read_ids)
+            PLOG_VERBOSE << "Classify read " << read_entry.read_id();
+            read_entry.classify(stats_model_);
+#pragma omp critical(print_result)
+            read_entry.print_assignment_result(input_summary_);
+#pragma omp critical(update_result_count)
             {
-                classify_read(read_id);
+                const auto &call = read_entry.call();
+                if (call < std::numeric_limits<uint8_t>::max())
+                {
+                    result_summary_.classified_counts[call] += 1;
+                } else {
+                    result_summary_.unclassified_count += 1;
+                }
             }
-            cached_read_ids.clear();
+            return run_extract_ and read_entry.call() == extract_category_;
         }
 
-        void complete()
+        void extract_read(const record_type& record)
         {
-            classify_cache();
+#pragma omp critical(extract_read)
+            extract_handle_.push_back(record);
         }
 
-        void post_process_read(const std::string read_id) {
-            PLOG_VERBOSE << "Post-process read " << read_id;
-            entries.at(read_id).post_process(summary_);
-            if (stats_model.ready()) {
-                classify_read(read_id);
+        void extract_paired_read(const record_type& record, const record_type& record2)
+        {
+#pragma omp critical(extract_read)
+                extract_handle_.push_back(record);
+#pragma omp critical(extract_read2)
+                extract_handle2_.push_back(record2);
+        }
+
+        void add_read(ReadEntry& read_entry, const record_type& record){
+            if (stats_model_.ready()) {
+                auto read_to_extract = classify_read(read_entry);
+                if (run_extract_ and read_to_extract){
+                    extract_read(record);
+                }
             } else {
-                PLOG_VERBOSE << "Add read to training " << read_id;
+                PLOG_VERBOSE << "Add read " << read_entry.read_id() << " to training ";
 #pragma omp critical(add_to_cache)
                 {
                     bool training_complete = false;
-                    if (cached_read_ids.size() < cached_read_ids.capacity())
+                    if (cached_reads_.size() < cached_reads_.capacity())
                     {
-                        cached_read_ids.push_back(read_id);
-                        training_complete = stats_model.add_read_to_training_data(entries.at(read_id).props());
+                        cached_reads_.emplace_back(ReadRecord(false, read_entry, record, record));
+                        training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
                     } else {
-                        stats_model.force_ready();
+                        stats_model_.force_ready();
                         training_complete = true;
                     }
 
@@ -120,22 +143,69 @@ class Result
             }
         }
 
-        void print_summary() {
-            uint64_t unclassified = 0;
-            std::vector<uint64_t> call_counts(summary_.num_categories(), 0);
-            for (const auto & [read_id, entry] : entries){
-                const auto & call = entry.call();
-                if (call == std::numeric_limits<uint8_t>::max())
-                    unclassified += 1;
-                else
-                    call_counts.at(call) += 1;
+        void add_paired_read(ReadEntry& read_entry, const record_type& record, const record_type& record2){
+            if (stats_model_.ready()) {
+                auto read_to_extract = classify_read(read_entry);
+                if (run_extract_ and read_to_extract){
+                    extract_paired_read(record, record2);
+                }
+            } else {
+                PLOG_VERBOSE << "Add read " << read_entry.read_id() << " to training ";
+#pragma omp critical(add_to_cache)
+                {
+                    bool training_complete = false;
+                    if (cached_reads_.size() < cached_reads_.capacity())
+                    {
+                        cached_reads_.emplace_back(ReadRecord(true, read_entry, record, record2));
+                        training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
+                    } else {
+                        stats_model_.force_ready();
+                        training_complete = true;
+                    }
+
+                    if (training_complete)
+                        classify_cache();
+                }
             }
+        }
+
+        void classify_cache()
+        {
+            PLOG_VERBOSE << "Classify cached reads";
+
+            for (auto read_record : cached_reads_)
+            {
+                auto & read_entry = read_record.read;
+                const auto & record = read_record.record;
+                bool read_to_extract = classify_read(read_entry);
+                if (run_extract_ and read_to_extract){
+                    if (read_record.is_paired)
+                    {
+                        const auto & record2 = read_record.record2;
+                        extract_paired_read(record, record2);
+                    } else {
+                        extract_read(record);
+                    }
+                }
+            }
+            cached_reads_.resize(0);
+        }
+
+        void complete()
+        {
+            classify_cache();
+        }
+
+
+
+        void print_summary() const {
+
             PLOG_INFO << "Results summary: ";
-            for (auto i = 0; i < call_counts.size(); i++) {
-                const auto & category = summary_.categories.at(i);
-                PLOG_INFO << category << " :\t\t" << call_counts.at(i);
+            for (auto i = 0; i < result_summary_.classified_counts.size(); i++) {
+                const auto & category = input_summary_.categories.at(i);
+                PLOG_INFO << category << " :\t\t" << result_summary_.classified_counts.at(i);
             }
-            PLOG_INFO << "unclassified :\t" << unclassified;
+            PLOG_INFO << "unclassified :\t" << result_summary_.unclassified_count;
         }
     };
 
