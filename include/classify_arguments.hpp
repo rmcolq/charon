@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstring>
+#include <unordered_map>
 
 /// Collection of all options of index subcommand.
 struct ClassifyArguments {
@@ -30,6 +31,7 @@ struct ClassifyArguments {
     // Output options
     bool run_extract {false};
     std::string category_to_extract;
+    std::unordered_map<std::string, std::vector<std::filesystem::path>> extract_paths;
     std::filesystem::path extract_file;
     std::filesystem::path extract_file2;
 

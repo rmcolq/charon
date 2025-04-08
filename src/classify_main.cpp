@@ -279,21 +279,39 @@ int classify_main(ClassifyArguments & opt)
 
     opt.run_extract = (opt.category_to_extract != "");
     const auto categories = index.categories();
-    if (opt.run_extract and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
+    if (opt.run_extract and opt.category_to_extract != "all" and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
     {
         std::string options = "";
         for (auto i: categories)
             options += i + " ";
-        PLOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ " << options << "]";
+        PLOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ all " << options << "]";
         return 1;
+    } else if (opt.run_extract and opt.category_to_extract == "all") {
+        for (const auto & category: categories){
+            opt.extract_file = opt.log_file;
+            if (opt.is_paired){
+                opt.extract_file.replace_extension(opt.category_to_extract + "_1" + opt.read_file.extension().string());
+                opt.extract_file2 = opt.log_file;
+                opt.extract_file2.replace_extension(opt.category_to_extract + "_2" + opt.read_file.extension().string());
+                opt.extract_paths[category].push_back(opt.extract_file);
+                opt.extract_paths[category].push_back(opt.extract_file2);
+            } else {
+                opt.extract_file.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
+                opt.extract_paths[category].push_back(opt.extract_file);
+            }
+        }
     } else if (opt.run_extract and opt.extract_file == ""){
-        opt.extract_file = opt.read_file;
+        opt.extract_file = opt.log_file;
         if (opt.is_paired){
+            opt.extract_file.replace_extension(opt.category_to_extract + "_1" + opt.read_file.extension().string());
+            opt.extract_file2 = opt.log_file;
+            opt.extract_file2.replace_extension(opt.category_to_extract + "_2" + opt.read_file.extension().string());
+            opt.extract_paths[category].push_back(opt.extract_file);
+            opt.extract_paths[category].push_back(opt.extract_file2);
+        } else {
             opt.extract_file.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
-            opt.extract_file2 = opt.read_file2;
-            opt.extract_file2.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
-        } else
-            opt.extract_file.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
+            opt.extract_paths[category].push_back(opt.extract_file);
+        }
     }
 
     if (opt.dist != "gamma" and opt.dist != "beta")
