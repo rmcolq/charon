@@ -10,6 +10,7 @@
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/types/vector.hpp>
 #include <cereal/types/utility.hpp>
+#include <seqan3/core/concept/cereal.hpp>
 #include <plog/Log.h>
 
 struct InputSummary
