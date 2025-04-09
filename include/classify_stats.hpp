@@ -15,6 +15,7 @@
 
 #include "input_summary.hpp"
 #include "classify_arguments.hpp"
+#include "dehost_arguments.hpp"
 
 double mean(const auto & v) {
     double sum = std::accumulate(std::begin(v), std::end(v), 0.0);
@@ -49,6 +50,14 @@ class TrainingData
 
         TrainingData(const ClassifyArguments & opt, const uint8_t i):
             id{i}
+        {
+            num_reads_to_fit = opt.num_reads_to_fit;
+            pos.reserve(opt.num_reads_to_fit);
+            neg.reserve(opt.num_reads_to_fit);
+        };
+
+        TrainingData(const DehostArguments & opt, const uint8_t i):
+                id{i}
         {
             num_reads_to_fit = opt.num_reads_to_fit;
             pos.reserve(opt.num_reads_to_fit);
@@ -358,6 +367,20 @@ class StatsModel
             }
             PLOG_DEBUG << "Initialize stats model with " << training_data_.size() << " sets of training data ";
         };
+
+    StatsModel(const DehostArguments& opt, const InputSummary & summary):
+            lo_hi_threshold_(opt.lo_hi_threshold),
+            min_quality_(opt.min_quality),
+            min_length_(opt.min_length),
+            confidence_threshold_(opt.confidence_threshold),
+            min_proportion_difference_(opt.min_proportion_difference)
+    {
+        for (auto i=0; i<summary.num_categories(); ++i){
+            models_.emplace_back(Model(i, opt.dist));
+            training_data_.emplace_back(TrainingData(opt, i));
+        }
+        PLOG_DEBUG << "Initialize stats model with " << training_data_.size() << " sets of training data ";
+    };
 
         bool ready() const
         {
