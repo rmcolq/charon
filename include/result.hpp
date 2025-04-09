@@ -10,7 +10,7 @@
 #include <utility>
 #include <plog/Log.h>
 
-#include "entry.hpp"
+#include "read_entry.hpp"
 #include "input_summary.hpp"
 #include "classify_stats.hpp"
 
@@ -56,6 +56,25 @@ class Result
         ~Result() = default;
 
         Result(const ClassifyArguments& opt, const InputSummary & summary):
+                input_summary_{summary},
+                result_summary_(summary.num_categories()),
+                run_extract_(opt.run_extract),
+                extract_handle_{std::cout, seqan3::format_fasta{}},
+                extract_handle2_{std::cout, seqan3::format_fasta{}}
+        {
+            stats_model_ = StatsModel(opt, summary);
+            if (opt.run_extract){
+                extract_handle_ = seqan3::sequence_file_output{opt.extract_file};
+                if (opt.is_paired)
+                    extract_handle2_ = seqan3::sequence_file_output{opt.extract_file2};
+
+                extract_category_ = category_index(opt.category_to_extract);
+            }
+            cached_reads_.reserve(opt.num_reads_to_fit*summary.num_categories()*4);
+
+        };
+
+        Result(const DehostArguments& opt, const InputSummary & summary):
                 input_summary_{summary},
                 result_summary_(summary.num_categories()),
                 run_extract_(opt.run_extract),
