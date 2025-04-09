@@ -9,7 +9,15 @@
 #include <fstream>
 #include <unordered_set>
 
+#include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/alphabet/quality/phred94.hpp>
+
 class IndexArguments;
+
+struct my_traits : seqan3::sequence_file_input_default_traits_dna
+{
+    using quality_alphabet = seqan3::phred94;
+};
 
 // used to transform paths to absolute paths - designed to be used with CLI11 transform
 std::filesystem::path make_absolute(std::filesystem::path);

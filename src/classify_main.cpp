@@ -1,9 +1,10 @@
-#include <unordered_map>
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
 
 #include "classify_main.hpp"
+#include "read_entry.hpp"
+#include "classify_stats.hpp"
 #include "index.hpp"
 #include "load_index.hpp"
 #include "utils.hpp"

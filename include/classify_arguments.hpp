@@ -4,8 +4,9 @@
 #pragma once
 
 #include <cstring>
+#include <filesystem>
 
-/// Collection of all options of index subcommand.
+/// Collection of all options of classify subcommand.
 struct ClassifyArguments {
     // IO options
     std::filesystem::path read_file;

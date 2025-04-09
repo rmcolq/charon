@@ -225,6 +225,74 @@ public:
         }
     }
 
+    void call_host(const StatsModel &stats_model) {
+        assert(probabilities_.size() == 2);
+
+        double first = probabilities_.at(0);
+        uint8_t first_pos = 0;
+        double second = probabilities_.at(1);
+        uint8_t second_pos = 1;
+        if (unique_counts_.at(second_pos) > unique_counts_.at(first_pos))
+        {
+            std::swap(first, second);
+            std::swap(first_pos, second_pos);
+        }
+
+        /*for (auto i = 0; i < probabilities_.size(); ++i) {
+            const double &val = probabilities_.at(i);
+            if (val >= second) {
+                second = val;
+                second_pos = i;
+                if (second >= first)
+                {
+                    std::swap(first, second);
+                    std::swap(first_pos, second_pos);
+                }
+            }
+        }*/
+
+        auto raw_confidence = unique_counts_.at(first_pos) - unique_counts_.at(second_pos);
+        if (raw_confidence > std::numeric_limits<uint8_t>::max())
+            confidence_score_ = std::numeric_limits<uint8_t>::max();
+        else
+            confidence_score_ = static_cast<uint8_t>(raw_confidence);
+
+        if (mean_quality_ < stats_model.min_quality()){
+            return;
+        }
+
+        if (length_ < stats_model.min_length()){
+            return;
+        }
+
+        if (second == 0 and first > 0) {
+            call_ = first_pos;
+        } else {
+            /*auto ratio = first/second;
+            PLOG_VERBOSE << "confidence score " << ratio << " from " << first << "/" << second;
+            if (ratio < std::numeric_limits<uint8_t>::max())
+                confidence_score_ = static_cast<uint8_t>(ratio);
+            else
+                confidence_score_ = std::numeric_limits<uint8_t>::max();*/
+            if (confidence_score_ > stats_model.confidence_threshold() and first > second)
+                call_ = first_pos;
+        }
+
+        const auto & first_count = counts_.at(first_pos);
+        const auto & second_count = counts_.at(second_pos);
+        if (second_count > first_count or first_count - second_count < stats_model.min_num_hits()){
+            PLOG_DEBUG << read_id_ << " has first count " << +first_count << " and second count " << +second_count << " which have differences less than " << +stats_model.min_num_hits();
+            call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this number of hits difference, then no call
+        }
+
+        const auto & first_prop = proportions_.at(first_pos);
+        const auto & second_prop = proportions_.at(second_pos);
+        if (second_prop > first_prop or first_prop - second_prop < stats_model.min_proportion_difference()){
+            PLOG_DEBUG << read_id_ << " has first proportion " << first_prop << " and second proportion " << second_prop << " which have differences less than " << stats_model.min_proportion_difference();
+            call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this level of discrepancy between the proportion hitting against each database don't call
+        }
+    }
+
     void classify(const StatsModel &stats_model) {
         PLOG_DEBUG << "Classify read " << read_id_;;
         for (auto i = 0; i < unique_proportions_.size(); ++i) {
