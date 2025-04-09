@@ -7,18 +7,11 @@
 #include <cstring>
 
 #include "CLI11.hpp"
-#include <seqan3/io/sequence_file/input.hpp>
-#include <seqan3/alphabet/quality/phred94.hpp>
 
 #include "result.hpp"
 
 class Index;
 struct ClassifyArguments;
-
-struct my_traits : seqan3::sequence_file_input_default_traits_dna
-{
-    using quality_alphabet = seqan3::phred94;
-};
 
 void setup_classify_subcommand(CLI::App& app);
 
