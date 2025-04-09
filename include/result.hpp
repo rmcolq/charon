@@ -11,6 +11,7 @@
 #include <plog/Log.h>
 
 #include "read_entry.hpp"
+#include "dehost_arguments.hpp"
 #include "input_summary.hpp"
 #include "classify_stats.hpp"
 
