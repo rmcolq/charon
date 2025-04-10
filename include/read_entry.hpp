@@ -225,7 +225,7 @@ public:
         }
     }
 
-    void call_host(const StatsModel &stats_model) {
+    void call_host(const StatsModel &stats_model, const uint8_t host_index) {
         assert(probabilities_.size() == 2);
 
         double first = probabilities_.at(0);
@@ -293,8 +293,7 @@ public:
         }
     }
 
-    void classify(const StatsModel &stats_model) {
-        PLOG_DEBUG << "Classify read " << read_id_;;
+    void apply_model(const StatsModel &stats_model) {
         for (auto i = 0; i < unique_proportions_.size(); ++i) {
             const auto &read_proportion = unique_proportions_.at(i);
             const auto result_pair = stats_model.classify(i, read_proportion);
@@ -302,7 +301,18 @@ public:
                        << result_pair.pos << " and " << result_pair.neg << " for read " << read_id_;
             probabilities_.at(i) *= result_pair.pos;
         }
+    }
+
+    void classify(const StatsModel &stats_model) {
+        PLOG_DEBUG << "Classify read " << read_id_;
+        apply_model(stats_model);
         call_category(stats_model);
+    }
+
+    void dehost(const StatsModel &stats_model, const uint8_t host_index) {
+        PLOG_DEBUG << "Classify read " << read_id_;
+        apply_model(stats_model);
+        call_host(stats_model, host_index);
     }
 
     void print_result(const InputSummary &summary) {

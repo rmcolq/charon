@@ -152,11 +152,11 @@ void dehost_reads(const DehostArguments& opt, const Index& index){
 
             read.post_process(result.input_summary());
 #pragma omp critical(add_read_to_results)
-            result.add_read(read, record);
+            result.add_read(read, record, true);
         }
         records.clear();
     }
-    result.complete();
+    result.complete(true);
     result.print_summary();
 }
 
