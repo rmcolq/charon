@@ -268,7 +268,7 @@ int dehost_main(DehostArguments & opt)
 
     if (opt.read_file2 != "") {
         opt.is_paired = true;
-        opt.min_length = 150;
+        opt.min_length = 120;
     }
 
     auto args = opt.to_string();
