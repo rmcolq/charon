@@ -23,7 +23,7 @@ struct ClassifyArguments {
 
     // thresholds for filtering
     float min_quality { 10.0 };
-    uint32_t min_length { 200 };
+    uint32_t min_length { 140 };
     uint8_t confidence_threshold{0};
     uint8_t min_hits{2};
     float min_proportion_difference { 0.00 };
