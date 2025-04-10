@@ -313,13 +313,13 @@ public:
     };
 
     void print_assignment_result(const InputSummary &summary) const {
-        // mimic the kraken assignment format with tab separated columns classification status, read_id call, num_hashes, details
+        // mimic the kraken assignment format with tab separated columns classification status, read_id, call, length, num_hashes, details
         if (call_ == std::numeric_limits<uint8_t>::max())
             std::cout << "U" << "\t";
         else
             std::cout << "C" << "\t";
         std::cout.precision(6);
-        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" ;
+        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" ;
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_.at(i) << ":" << proportions_.at(i)
                       << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";
