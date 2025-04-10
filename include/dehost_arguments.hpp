@@ -24,8 +24,8 @@ struct DehostArguments {
     float min_quality { 10.0 };
     uint32_t min_length { 1000 };
     uint8_t confidence_threshold{2};
-    float host_unique_prop_threshold{ 0.1 };
-    float other_unique_prop_threshold{ 0.05 };
+    float host_unique_prop_hi_threshold{ 0.1 };
+    float host_unique_prop_lo_threshold{ 0.05 };
     float min_proportion_difference { 0.04 };
 
     // Output options

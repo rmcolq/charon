@@ -331,8 +331,8 @@ private:
     uint32_t min_length_;
     int8_t confidence_threshold_;
     uint8_t min_hits_;
-    float host_unique_prop_threshold_;
-    float other_unique_prop_threshold_;
+    float host_unique_prop_hi_threshold_;
+    float host_unique_prop_lo_threshold_;
     float min_proportion_difference_;
 
     std::vector<TrainingData> training_data_;
@@ -370,8 +370,8 @@ public:
             min_quality_(opt.min_quality),
             min_length_(opt.min_length),
             confidence_threshold_(opt.confidence_threshold),
-            host_unique_prop_threshold_(opt.host_unique_prop_threshold),
-            other_unique_prop_threshold_(opt.other_unique_prop_threshold),
+            host_unique_prop_hi_threshold_(opt.host_unique_prop_hi_threshold),
+            host_unique_prop_lo_threshold_(opt.host_unique_prop_lo_threshold),
             min_proportion_difference_(opt.min_proportion_difference) {
         for (auto i = 0; i < summary.num_categories(); ++i) {
             models_.emplace_back(Model(i, opt.dist));
@@ -422,12 +422,12 @@ public:
         return min_hits_;
     }
 
-    float host_unique_prop_threshold() const {
-        return host_unique_prop_threshold_;
+    float host_unique_prop_hi_threshold() const {
+        return host_unique_prop_hi_threshold_;
     }
 
-    float other_unique_prop_threshold() const {
-        return other_unique_prop_threshold_;
+    float host_unique_prop_lo_threshold() const {
+        return host_unique_prop_lo_threshold_;
     }
 
     float min_proportion_difference() const {
