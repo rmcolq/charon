@@ -127,7 +127,7 @@ void dehost_reads(const DehostArguments& opt, const Index& index){
 
             const record_type & record = records[i];
             const auto read_id = split(record.id(), " ")[0];
-            const auto read_length = record.sequence().size();
+            const uint32_t read_length = std::ranges::size(record.sequence());
             if (read_length > std::numeric_limits<uint32_t>::max()){
                 PLOG_WARNING << "Ignoring read " << record.id() << " as too long!";
                 continue;
@@ -211,7 +211,7 @@ void dehost_paired_reads(const DehostArguments& opt, const Index& index){
                 throw std::runtime_error("Your pairs don't match for read ids.");
             }
             const auto read_id = split(record1.id(), " ")[0];
-            const auto read_length = record1.sequence().size() + record2.sequence().size();
+            const uint32_t read_length = std::ranges::size(record1.sequence()) + std::ranges::size(record2.sequence());
             if (read_length > std::numeric_limits<uint32_t>::max()){
                 PLOG_WARNING << "Ignoring read " << record1.id() << " as too long!";
                 continue;
