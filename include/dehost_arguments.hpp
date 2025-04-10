@@ -56,8 +56,8 @@ struct DehostArguments {
         ss += "\tmin_length:\t\t" + std::to_string(min_length) + "\n";
         ss += "\tmin_quality:\t\t" + std::to_string(min_quality) + "\n";
         ss += "\tconfidence_threshold:\t" + std::to_string(confidence_threshold) + "\n";
-        ss += "\thost_unique_prop_threshold:\t" + std::to_string(host_unique_prop_threshold) + "\n";
-        ss += "\tother_unique_prop_threshold:\t" + std::to_string(other_unique_prop_threshold) + "\n";
+        ss += "\thost_unique_prop_lo_hreshold:\t" + std::to_string(host_unique_prop_lo_threshold) + "\n";
+        ss += "\thost_unique_prop_hi_threshold:\t" + std::to_string(host_unique_prop_hi_threshold) + "\n";
         ss += "\tmin_proportion_difference:\t\t" + std::to_string(min_proportion_difference) + "\n\n";
         
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
