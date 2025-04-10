@@ -241,26 +241,25 @@ public:
         assert(training_data.id == id);
         if (training_data.pos_complete) {
             g_pos.fit(training_data.pos);
-            auto ad = g_pos.calculate_anderson_darling(training_data.pos);
+            //auto ad = g_pos.calculate_anderson_darling(training_data.pos);
             PLOG_INFO << "Model " << +id << " fit g_pos data with Gamma (shape:" << g_pos.shape << ", loc: 0, scale: "
-                      << g_pos.scale << "). Anderson-darling statistic is " << ad;
+                      << g_pos.scale << ")";//. Anderson-darling statistic is " << ad;
         } else {
-            auto ad = g_pos.calculate_anderson_darling(training_data.pos);
+            //auto ad = g_pos.calculate_anderson_darling(training_data.pos);
             PLOG_INFO << "Model " << +id << " using default for g_pos data with Gamma (shape:" << g_pos.shape
-                      << ", loc: 0, scale: " << g_pos.scale << "). Anderson-darling statistic is " << ad;
+                      << ", loc: 0, scale: " << g_pos.scale << ")";//. Anderson-darling statistic is " << ad;
         }
 
         if (training_data.neg_complete) {
             g_neg.fit(training_data.neg);
-            auto ad = g_neg.calculate_anderson_darling(training_data.neg);
+            //auto ad = g_neg.calculate_anderson_darling(training_data.neg);
             PLOG_INFO << "Model " << +id << " fit g_neg data with Gamma (shape:" << g_neg.shape << ", loc: 0, scale: "
-                      << g_neg.scale << "). Anderson-darling statistic is " << ad;
+                      << g_neg.scale << ")";//. Anderson-darling statistic is " << ad;
         } else {
             g_neg.fit_loc(training_data.neg);
-            auto ad = g_neg.calculate_anderson_darling(training_data.neg);
+            //auto ad = g_neg.calculate_anderson_darling(training_data.neg);
             PLOG_INFO << "Model " << +id << " using default for g_neg data with Gamma (shape:" << g_neg.shape
-                      << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale << "). Anderson-darling statistic is "
-                      << ad;
+                      << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale << ")";//. Anderson-darling statistic is " << ad;
         }
     }
 
@@ -268,24 +267,24 @@ public:
         assert(training_data.id == id);
         if (training_data.pos_complete) {
             b_pos.fit(training_data.pos, true);
-            auto ad = b_pos.calculate_anderson_darling(training_data.pos);
+            //auto ad = b_pos.calculate_anderson_darling(training_data.pos);
             PLOG_INFO << "Model " << +id << " fit pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
-                      << b_pos.beta << "). Anderson-darling statistic is " << ad;
+                      << b_pos.beta << ")";//. Anderson-darling statistic is " << ad;
         } else {
-            auto ad = b_pos.calculate_anderson_darling(training_data.pos);
+            //auto ad = b_pos.calculate_anderson_darling(training_data.pos);
             PLOG_INFO << "Model " << +id << " using default for pos data with Beta (alpha:" << b_pos.alpha << ", beta: "
-                      << b_pos.beta << "). Anderson-darling statistic is " << ad;
+                      << b_pos.beta << ")";//. Anderson-darling statistic is " << ad;
         }
 
         if (training_data.neg_complete) {
             b_neg.fit(training_data.neg, false);
-            auto ad = b_neg.calculate_anderson_darling(training_data.neg);
+            //auto ad = b_neg.calculate_anderson_darling(training_data.neg);
             PLOG_INFO << "Model " << +id << " fit neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
-                      << b_neg.beta << ", loc: " << b_neg.loc << "). Anderson-darling statistic is " << ad;
+                      << b_neg.beta << ", loc: " << b_neg.loc << ")";//. Anderson-darling statistic is " << ad;
         } else {
-            auto ad = b_neg.calculate_anderson_darling(training_data.neg);
+            //auto ad = b_neg.calculate_anderson_darling(training_data.neg);
             PLOG_INFO << "Model " << +id << " using default for neg data with Beta (alpha:" << b_neg.alpha << ", beta: "
-                      << b_neg.beta << ", loc: " << b_neg.loc << "). Anderson-darling statistic is " << ad;
+                      << b_neg.beta << ", loc: " << b_neg.loc << ")";//. Anderson-darling statistic is " << ad;
         }
     }
 
