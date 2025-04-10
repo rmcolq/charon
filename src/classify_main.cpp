@@ -75,7 +75,12 @@ void setup_classify_subcommand(CLI::App& app)
             ->capture_default_str();
 
     classify_subcommand
-            ->add_option("--min_hits", opt->confidence_threshold, "Minimum difference between the top 2 (non-unique) hit counts.")
+            ->add_option("--min_hits", opt->min_hits, "Minimum difference between the top 2 (non-unique) hit counts.")
+            ->type_name("INT")
+            ->capture_default_str();
+
+    classify_subcommand
+            ->add_option("--min_length", opt->min_length, "Minimum length of read for classification.")
             ->type_name("INT")
             ->capture_default_str();
 
