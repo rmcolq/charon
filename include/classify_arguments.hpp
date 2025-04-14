@@ -24,6 +24,7 @@ struct ClassifyArguments {
     // thresholds for filtering
     float min_quality { 10.0 };
     uint32_t min_length { 140 };
+    float min_compression {0.15};
     uint8_t confidence_threshold{0};
     uint8_t min_hits{2};
     float min_proportion_difference { 0.00 };
@@ -55,6 +56,7 @@ struct ClassifyArguments {
 
         ss += "\tmin_length:\t\t" + std::to_string(min_length) + "\n";
         ss += "\tmin_quality:\t\t" + std::to_string(min_quality) + "\n";
+        ss += "\tmin_compression:\t\t" + std::to_string(min_compression) + "\n";
         ss += "\tconfidence_threshold:\t" + std::to_string(confidence_threshold) + "\n";
         ss += "\tmin_hits:\t\t" + std::to_string(min_hits) + "\n";
         ss += "\tmin_diff:\t\t" + std::to_string(min_proportion_difference) + "\n\n";

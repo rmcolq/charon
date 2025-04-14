@@ -328,6 +328,7 @@ private:
 
     float min_quality_;
     uint32_t min_length_;
+    float min_compression_;
     int8_t confidence_threshold_;
     uint8_t min_hits_;
     float host_unique_prop_hi_threshold_;
@@ -354,6 +355,7 @@ public:
             lo_hi_threshold_(opt.lo_hi_threshold),
             min_quality_(opt.min_quality),
             min_length_(opt.min_length),
+            min_compression_(opt.min_compression),
             confidence_threshold_(opt.confidence_threshold),
             min_hits_(opt.min_hits),
             min_proportion_difference_(opt.min_proportion_difference) {
@@ -368,6 +370,7 @@ public:
             lo_hi_threshold_(opt.lo_hi_threshold),
             min_quality_(opt.min_quality),
             min_length_(opt.min_length),
+            min_compression_(opt.min_compression),
             confidence_threshold_(opt.confidence_threshold),
             host_unique_prop_hi_threshold_(opt.host_unique_prop_hi_threshold),
             host_unique_prop_lo_threshold_(opt.host_unique_prop_lo_threshold),
@@ -411,6 +414,10 @@ public:
 
     uint32_t min_length() const {
         return min_length_;
+    }
+
+    float min_compression() const {
+        return min_compression_;
     }
 
     int8_t confidence_threshold() const {

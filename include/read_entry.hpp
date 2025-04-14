@@ -198,6 +198,10 @@ public:
             return;
         }
 
+        if (compression_ < stats_model.min_compression()){
+            return;
+        }
+
         if (second == 0 and first > 0) {
             call_ = first_pos;
         } else {
@@ -254,6 +258,10 @@ public:
         }
 
         if (length_ < stats_model.min_length()){
+            return;
+        }
+
+        if (compression_ < stats_model.min_compression()){
             return;
         }
 
@@ -320,7 +328,7 @@ public:
         else
             std::cout << "C" << "\t";
         std::cout.precision(6);
-        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" ;
+        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_.at(i) << ":" << proportions_.at(i)
                       << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";

@@ -23,6 +23,7 @@ struct DehostArguments {
     // thresholds for filtering
     float min_quality { 10.0 };
     uint32_t min_length { 140 };
+    float min_compression {0.15};
     uint8_t confidence_threshold{2};
     float host_unique_prop_hi_threshold{ 0.1 };
     float host_unique_prop_lo_threshold{ 0.05 };
@@ -55,6 +56,7 @@ struct DehostArguments {
 
         ss += "\tmin_length:\t\t" + std::to_string(min_length) + "\n";
         ss += "\tmin_quality:\t\t" + std::to_string(min_quality) + "\n";
+        ss += "\tmin_compression:\t\t" + std::to_string(min_compression) + "\n";
         ss += "\tconfidence_threshold:\t" + std::to_string(confidence_threshold) + "\n";
         ss += "\thost_unique_prop_lo_hreshold:\t" + std::to_string(host_unique_prop_lo_threshold) + "\n";
         ss += "\thost_unique_prop_hi_threshold:\t" + std::to_string(host_unique_prop_hi_threshold) + "\n";
