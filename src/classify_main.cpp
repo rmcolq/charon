@@ -149,7 +149,10 @@ void classify_reads(const ClassifyArguments& opt, const Index& index){
                 mean_quality = static_cast< float >( sum )/ static_cast< float >(std::ranges::size(qualities));
             PLOG_VERBOSE << "Mean quality of read  " << record.id() << " is " << mean_quality;
 
-            auto read = ReadEntry(read_id, read_length, mean_quality, result.input_summary());
+            float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
+            PLOG_VERBOSE << "Found compression ratio of read  " << record.id() << " is " << compression_ratio;
+
+            auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
             for (auto && value : record.sequence() | hash_adaptor) {
                 const auto & entry = agent.bulk_contains(value);
                 read.update_entry(entry);
@@ -235,7 +238,11 @@ void classify_paired_reads(const ClassifyArguments& opt, const Index& index){
                 mean_quality = static_cast< float >( sum )/ static_cast< float >(std::ranges::size(qualities1) + std::ranges::size(qualities2));
             PLOG_VERBOSE << "Mean quality of read  " << record1.id() << " is " << mean_quality;
 
-            auto read = ReadEntry(read_id, read_length, mean_quality, result.input_summary());
+            auto combined_record = sequence_to_string(record1.sequence()) + sequence_to_string(record2.sequence());
+            float compression_ratio = get_compression_ratio(combined_record);
+            PLOG_VERBOSE << "Found compression ratio of read  " << record1.id() << " is " << compression_ratio;
+
+            auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
             for (auto && value : record1.sequence() | hash_adaptor) {
                 const auto & entry = agent.bulk_contains(value);
                 read.update_entry(entry);

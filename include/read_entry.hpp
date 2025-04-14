@@ -18,6 +18,7 @@ private:
     std::string read_id_;
     uint32_t length_;
     float mean_quality_;
+    float compression_;
 
     uint32_t num_hashes_{0};
     std::vector<seqan3::interleaved_bloom_filter< seqan3::compressed >::membership_agent_type::binning_bitvector> bits_;// this collects over all bins
@@ -42,10 +43,11 @@ public:
 
     ~ReadEntry() = default;
 
-    ReadEntry(const std::string& read_id, const uint32_t& length, const float& mean_quality, const InputSummary &summary) :
+    ReadEntry(const std::string& read_id, const uint32_t& length, const float& mean_quality, const float& compression, const InputSummary &summary) :
             read_id_(read_id),
             length_(length),
             mean_quality_(mean_quality),
+            compression_(compression),
             counts_(summary.num_categories(), 0),
             proportions_(summary.num_categories(),0),
             unique_proportions_(summary.num_categories(),0),
@@ -148,8 +150,7 @@ public:
         PLOG_DEBUG << "Found proportions " << proportions_;
         PLOG_DEBUG << "Found unique_proportions " << unique_proportions_;
         return;
-    };
-
+    }
 
     void post_process(const InputSummary &summary) {
         get_counts(summary);

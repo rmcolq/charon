@@ -48,6 +48,13 @@ CPMDeclarePackage ( zlib
         GIT_SHALLOW TRUE
         DOWNLOAD_ONLY TRUE
 )
+CPMDeclarePackage( gzip
+        NAME gzip
+        GITHUB_REPOSITORY mapbox/gzip-hpp
+        GIT_TAG 7546b35
+        GIT_SHALLOW TRUE
+        DOWNLOAD_ONLY TRUE
+)
 
 # googletest
 set (GOOGLETEST_VERSION 1.15.2)
