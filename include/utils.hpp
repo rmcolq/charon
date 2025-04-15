@@ -9,7 +9,15 @@
 #include <fstream>
 #include <unordered_set>
 
+#include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/alphabet/quality/phred94.hpp>
+
 class IndexArguments;
+
+struct my_traits : seqan3::sequence_file_input_default_traits_dna
+{
+    using quality_alphabet = seqan3::phred94;
+};
 
 // used to transform paths to absolute paths - designed to be used with CLI11 transform
 std::filesystem::path make_absolute(std::filesystem::path);
@@ -30,4 +38,7 @@ size_t bin_size_in_bits(const IndexArguments & opt, const uint64_t & num_element
 
 size_t max_num_hashes_for_fpr(const IndexArguments & opt);
 
+std::string sequence_to_string(const __type_pack_element<0, std::vector<seqan3::dna5>, std::string, std::vector<seqan3::phred94>>& input);
+
+float get_compression_ratio(const std::string& sequence);
 #endif

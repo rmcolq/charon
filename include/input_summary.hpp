@@ -10,6 +10,7 @@
 #include <cereal/types/unordered_map.hpp>
 #include <cereal/types/vector.hpp>
 #include <cereal/types/utility.hpp>
+#include <seqan3/core/concept/cereal.hpp>
 #include <plog/Log.h>
 
 struct InputSummary
@@ -40,6 +41,17 @@ struct InputSummary
                     return i;
             }
             return std::numeric_limits<uint8_t>::max();
+        }
+
+        uint8_t host_category_index() const
+        {
+            auto index1 = category_index("human");
+            auto index2 = category_index("host");
+            auto index = std::min(index1, index2);
+            if (index == std::numeric_limits<uint8_t>::max())
+                PLOG_ERROR << "Neither 'human' nor 'host' appear as categories in the index";
+            assert(index != std::numeric_limits<uint8_t>::max());
+            return index;
         }
 
         std::string category_name(const uint8_t index) const

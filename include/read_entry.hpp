@@ -18,6 +18,7 @@ private:
     std::string read_id_;
     uint32_t length_;
     float mean_quality_;
+    float compression_;
 
     uint32_t num_hashes_{0};
     std::vector<seqan3::interleaved_bloom_filter< seqan3::compressed >::membership_agent_type::binning_bitvector> bits_;// this collects over all bins
@@ -42,10 +43,11 @@ public:
 
     ~ReadEntry() = default;
 
-    ReadEntry(const std::string& read_id, const uint32_t& length, const float& mean_quality, const InputSummary &summary) :
+    ReadEntry(const std::string& read_id, const uint32_t& length, const float& mean_quality, const float& compression, const InputSummary &summary) :
             read_id_(read_id),
             length_(length),
             mean_quality_(mean_quality),
+            compression_(compression),
             counts_(summary.num_categories(), 0),
             proportions_(summary.num_categories(),0),
             unique_proportions_(summary.num_categories(),0),
@@ -148,8 +150,7 @@ public:
         PLOG_DEBUG << "Found proportions " << proportions_;
         PLOG_DEBUG << "Found unique_proportions " << unique_proportions_;
         return;
-    };
-
+    }
 
     void post_process(const InputSummary &summary) {
         get_counts(summary);
@@ -197,6 +198,10 @@ public:
             return;
         }
 
+        if (compression_ < stats_model.min_compression()){
+            return;
+        }
+
         if (second == 0 and first > 0) {
             call_ = first_pos;
         } else {
@@ -225,8 +230,48 @@ public:
         }
     }
 
-    void classify(const StatsModel &stats_model) {
-        PLOG_DEBUG << "Classify read " << read_id_;;
+    void call_host(const StatsModel &stats_model, const uint8_t host_index) {
+        assert(probabilities_.size() == 2);
+        const uint8_t other_index = 1-host_index;
+
+        double host_unique_prop = unique_proportions_.at(host_index);
+        double other_unique_prop = unique_proportions_.at(other_index);
+
+        auto first_pos = host_index;
+        auto second_pos = other_index;
+        if (host_unique_prop < other_unique_prop)
+        {
+            first_pos = other_index;
+            second_pos = host_index;
+        }
+        auto raw_confidence = unique_counts_.at(first_pos) - unique_counts_.at(second_pos);
+        if (raw_confidence > std::numeric_limits<uint8_t>::max())
+            confidence_score_ = std::numeric_limits<uint8_t>::max();
+        else
+            confidence_score_ = static_cast<uint8_t>(raw_confidence);
+        if (confidence_score_ < stats_model.confidence_threshold()){
+            return;
+        }
+
+        if (mean_quality_ < stats_model.min_quality()){
+            return;
+        }
+
+        if (length_ < stats_model.min_length()){
+            return;
+        }
+
+        if (compression_ < stats_model.min_compression()){
+            return;
+        }
+
+        if (host_unique_prop > other_unique_prop and host_unique_prop - other_unique_prop > stats_model.min_proportion_difference())
+            call_ = host_index;
+        else if (host_unique_prop < stats_model.host_unique_prop_lo_threshold() and host_unique_prop < other_unique_prop and other_unique_prop - host_unique_prop > stats_model.min_proportion_difference())
+            call_ = other_index;
+    }
+
+    void apply_model(const StatsModel &stats_model) {
         for (auto i = 0; i < unique_proportions_.size(); ++i) {
             const auto &read_proportion = unique_proportions_.at(i);
             const auto result_pair = stats_model.classify(i, read_proportion);
@@ -234,7 +279,18 @@ public:
                        << result_pair.pos << " and " << result_pair.neg << " for read " << read_id_;
             probabilities_.at(i) *= result_pair.pos;
         }
+    }
+
+    void classify(const StatsModel &stats_model) {
+        PLOG_DEBUG << "Classify read " << read_id_;
+        apply_model(stats_model);
         call_category(stats_model);
+    }
+
+    void dehost(const StatsModel &stats_model, const uint8_t host_index) {
+        PLOG_DEBUG << "Classify read " << read_id_;
+        apply_model(stats_model);
+        call_host(stats_model, host_index);
     }
 
     void print_result(const InputSummary &summary) {
@@ -266,13 +322,13 @@ public:
     };
 
     void print_assignment_result(const InputSummary &summary) const {
-        // mimic the kraken assignment format with tab separated columns classification status, read_id call, num_hashes, details
+        // mimic the kraken assignment format with tab separated columns classification status, read_id, call, length, num_hashes, details
         if (call_ == std::numeric_limits<uint8_t>::max())
             std::cout << "U" << "\t";
         else
             std::cout << "C" << "\t";
         std::cout.precision(6);
-        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" ;
+        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_.at(i) << ":" << proportions_.at(i)
                       << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";

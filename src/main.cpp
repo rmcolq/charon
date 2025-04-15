@@ -4,6 +4,7 @@
 
 #include "index_main.hpp"
 #include "classify_main.hpp"
+#include "dehost_main.hpp"
 #include "version.h.in"
 
 class MyFormatter : public CLI::Formatter {
@@ -57,6 +58,7 @@ int main(int argc, char* argv[])
     });
     setup_index_subcommand(app);
     setup_classify_subcommand(app);
+    setup_dehost_subcommand(app);
 
 
     app.require_subcommand();

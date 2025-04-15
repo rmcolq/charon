@@ -2,6 +2,7 @@
 #include "index_main.hpp"
 
 #include <plog/Log.h>
+#include <gzip/compress.hpp>
 
 std::filesystem::path make_absolute(std::filesystem::path path) { return std::filesystem::absolute(path); }
 
@@ -107,3 +108,24 @@ size_t max_num_hashes_for_fpr(const IndexArguments & opt)
 
     return result;
 }
+//std::__tuple_element_t<std::vector<seqan3::dna5>,std::vector<seqan3::phred94>>
+std::string sequence_to_string(const __type_pack_element<0, std::vector<seqan3::dna5>, std::string, std::vector<seqan3::phred94>>& input){
+    std::vector<char> sequence{};
+    for (auto c : input)
+        sequence.push_back(seqan3::to_char(c));
+    std::string str(sequence.begin(), sequence.end());
+    return str;
+}
+
+float get_compression_ratio(const std::string& sequence){
+    const char * pointer = sequence.data();
+    std::size_t initial_size = sequence.size();
+
+    std::string compressed_data = gzip::compress(pointer, initial_size);
+    const char * compressed_pointer = compressed_data.data();
+    std::size_t compressed_size = compressed_data.size();
+
+    assert(compressed_size != 0);
+    return static_cast<double>(compressed_size)/static_cast<double>(initial_size);
+}
+

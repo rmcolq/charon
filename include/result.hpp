@@ -10,7 +10,8 @@
 #include <utility>
 #include <plog/Log.h>
 
-#include "entry.hpp"
+#include "read_entry.hpp"
+#include "dehost_arguments.hpp"
 #include "input_summary.hpp"
 #include "classify_stats.hpp"
 
@@ -74,6 +75,25 @@ class Result
 
         };
 
+        Result(const DehostArguments& opt, const InputSummary & summary):
+                input_summary_{summary},
+                result_summary_(summary.num_categories()),
+                run_extract_(opt.run_extract),
+                extract_handle_{std::cout, seqan3::format_fasta{}},
+                extract_handle2_{std::cout, seqan3::format_fasta{}}
+        {
+            stats_model_ = StatsModel(opt, summary);
+            if (opt.run_extract){
+                extract_handle_ = seqan3::sequence_file_output{opt.extract_file};
+                if (opt.is_paired)
+                    extract_handle2_ = seqan3::sequence_file_output{opt.extract_file2};
+
+                extract_category_ = category_index(opt.category_to_extract);
+            }
+            cached_reads_.reserve(opt.num_reads_to_fit*summary.num_categories()*4);
+
+        };
+
         const InputSummary& input_summary() const
         {
             return input_summary_;
@@ -84,10 +104,13 @@ class Result
             return input_summary_.category_index(category);
         }
 
-        bool classify_read(ReadEntry& read_entry)
+        bool classify_read(ReadEntry& read_entry, const bool dehost=false)
         {
             PLOG_VERBOSE << "Classify read " << read_entry.read_id();
-            read_entry.classify(stats_model_);
+            if (dehost)
+                read_entry.dehost(stats_model_, input_summary_.host_category_index());
+            else
+                read_entry.classify(stats_model_);
 #pragma omp critical(print_result)
             read_entry.print_assignment_result(input_summary_);
 #pragma omp critical(update_result_count)
@@ -117,9 +140,9 @@ class Result
                 extract_handle2_.push_back(record2);
         }
 
-        void add_read(ReadEntry& read_entry, const record_type& record){
+        void add_read(ReadEntry& read_entry, const record_type& record, bool dehost=false){
             if (stats_model_.ready()) {
-                auto read_to_extract = classify_read(read_entry);
+                auto read_to_extract = classify_read(read_entry, dehost);
                 if (run_extract_ and read_to_extract){
                     extract_read(record);
                 }
@@ -138,14 +161,14 @@ class Result
                     }
 
                     if (training_complete)
-                        classify_cache();
+                        classify_cache(dehost);
                 }
             }
         }
 
-        void add_paired_read(ReadEntry& read_entry, const record_type& record, const record_type& record2){
+        void add_paired_read(ReadEntry& read_entry, const record_type& record, const record_type& record2, const bool dehost=false){
             if (stats_model_.ready()) {
-                auto read_to_extract = classify_read(read_entry);
+                auto read_to_extract = classify_read(read_entry, dehost);
                 if (run_extract_ and read_to_extract){
                     extract_paired_read(record, record2);
                 }
@@ -164,12 +187,12 @@ class Result
                     }
 
                     if (training_complete)
-                        classify_cache();
+                        classify_cache(dehost);
                 }
             }
         }
 
-        void classify_cache()
+        void classify_cache(const bool dehost=false)
         {
             PLOG_VERBOSE << "Classify cached reads";
 
@@ -177,7 +200,7 @@ class Result
             {
                 auto & read_entry = read_record.read;
                 const auto & record = read_record.record;
-                bool read_to_extract = classify_read(read_entry);
+                bool read_to_extract = classify_read(read_entry, dehost);
                 if (run_extract_ and read_to_extract){
                     if (read_record.is_paired)
                     {
@@ -191,9 +214,9 @@ class Result
             cached_reads_.resize(0);
         }
 
-        void complete()
+        void complete(const bool dehost=false)
         {
-            classify_cache();
+            classify_cache(dehost);
         }
 
 

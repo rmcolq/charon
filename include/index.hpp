@@ -70,6 +70,17 @@ class Index
             return summary_.categories;
         }
 
+        uint8_t get_host_index() const
+        {
+            const auto index1 = summary_.category_index("host");
+            const auto index2 = summary_.category_index("human");
+            auto index = std::min(index1, index2);
+            if (index == std::numeric_limits<uint8_t>::max())
+                PLOG_ERROR << "Index does not contain 'host' or 'human' as a category ";
+            assert(index < std::numeric_limits<uint8_t>::max());
+            return index;
+        }
+
         double max_fpr() const
         {
             return max_fpr_;

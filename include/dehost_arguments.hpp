@@ -1,13 +1,12 @@
-#ifndef CHARON_CLASSIFY_ARGUMENTS_H
-#define CHARON_CLASSIFY_ARGUMENTS_H
+#ifndef CHARON_DEHOST_ARGUMENTS_H
+#define CHARON_DEHOST_ARGUMENTS_H
 
 #pragma once
 
 #include <cstring>
-#include <filesystem>
 
-/// Collection of all options of classify subcommand.
-struct ClassifyArguments {
+/// Collection of all options of dehost subcommand.
+struct DehostArguments {
     // IO options
     std::filesystem::path read_file;
     std::filesystem::path read_file2;
@@ -25,9 +24,10 @@ struct ClassifyArguments {
     float min_quality { 10.0 };
     uint32_t min_length { 140 };
     float min_compression {0.15};
-    uint8_t confidence_threshold{0};
-    uint8_t min_hits{2};
-    float min_proportion_difference { 0.00 };
+    uint8_t confidence_threshold{2};
+    float host_unique_prop_hi_threshold{ 0.1 };
+    float host_unique_prop_lo_threshold{ 0.05 };
+    float min_proportion_difference { 0.04 };
 
     // Output options
     bool run_extract {false};
@@ -44,7 +44,7 @@ struct ClassifyArguments {
     {
         std::string ss;
 
-        ss += "\n\nClassify Arguments:\n\n";
+        ss += "\n\nDehost Arguments:\n\n";
         ss += "\tread_file:\t\t" + read_file.string() + "\n";
         ss += "\tdb:\t\t\t" + db + "\n\n";
 
@@ -58,9 +58,10 @@ struct ClassifyArguments {
         ss += "\tmin_quality:\t\t" + std::to_string(min_quality) + "\n";
         ss += "\tmin_compression:\t\t" + std::to_string(min_compression) + "\n";
         ss += "\tconfidence_threshold:\t" + std::to_string(confidence_threshold) + "\n";
-        ss += "\tmin_hits:\t\t" + std::to_string(min_hits) + "\n";
-        ss += "\tmin_diff:\t\t" + std::to_string(min_proportion_difference) + "\n\n";
-
+        ss += "\thost_unique_prop_lo_hreshold:\t" + std::to_string(host_unique_prop_lo_threshold) + "\n";
+        ss += "\thost_unique_prop_hi_threshold:\t" + std::to_string(host_unique_prop_hi_threshold) + "\n";
+        ss += "\tmin_proportion_difference:\t\t" + std::to_string(min_proportion_difference) + "\n\n";
+        
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
         ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";
 
@@ -72,4 +73,4 @@ struct ClassifyArguments {
     }
 };
 
-#endif // CHARON_CLASSIFY_ARGUMENTS_H
+#endif // CHARON_DEHOST_ARGUMENTS_H

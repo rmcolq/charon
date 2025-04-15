@@ -2,8 +2,7 @@
 #include <iostream>
 #include <algorithm>
 
-#include "classify_main.hpp"
-#include "read_entry.hpp"
+#include "dehost_main.hpp"
 #include "classify_stats.hpp"
 #include "index.hpp"
 #include "load_index.hpp"
@@ -21,87 +20,82 @@
 #include <seqan3/utility/range/concept.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
-void setup_classify_subcommand(CLI::App& app)
+void setup_dehost_subcommand(CLI::App& app)
 {
-    auto opt = std::make_shared<ClassifyArguments>();
-    auto* classify_subcommand = app.add_subcommand(
-        "classify", "Classify read file using index.");
+    auto opt = std::make_shared<DehostArguments>();
+    auto* dehost_subcommand = app.add_subcommand(
+        "dehost", "Dehost read file into host and other using index.");
 
-    classify_subcommand->add_option("<fastaq>", opt->read_file, "Fasta/q file")
+    dehost_subcommand->add_option("<fastaq>", opt->read_file, "Fasta/q file")
         ->required()
         ->transform(make_absolute)
         ->check(CLI::ExistingFile.description(""))
         ->type_name("FILE");
 
-    classify_subcommand->add_option("<fastaq>", opt->read_file2, "Paired Fasta/q file")
+    dehost_subcommand->add_option("<fastaq>", opt->read_file2, "Paired Fasta/q file")
             ->transform(make_absolute)
             ->check(CLI::ExistingFile.description(""))
             ->type_name("FILE");
 
-    classify_subcommand
+    dehost_subcommand
             ->add_option("--chunk_size", opt->chunk_size, "Read file is read in chunks of this size, to be processed in parallel within a chunk.")
             ->type_name("INT")
             ->capture_default_str();
 
-    classify_subcommand
+    dehost_subcommand
         ->add_option("-t,--threads", opt->threads, "Maximum number of threads to use.")
         ->type_name("INT")
         ->capture_default_str();
 
-    classify_subcommand->add_option("--db", opt->db, "Prefix for the index.")
+    dehost_subcommand->add_option("--db", opt->db, "Prefix for the index.")
         ->type_name("FILE")
         ->required()
         ->check(CLI::ExistingPath.description(""));
 
-    classify_subcommand->add_option("-e,--extract", opt->category_to_extract, "Reads from this category in the index will be extracted to file.")
+    dehost_subcommand->add_option("-e,--extract", opt->category_to_extract, "Reads from this category in the index will be extracted to file.")
             ->type_name("STRING");
 
-    classify_subcommand->add_option("--extract_file", opt->extract_file, "Fasta/q file for output")
+    dehost_subcommand->add_option("--extract_file", opt->extract_file, "Fasta/q file for output")
             ->transform(make_absolute)
             ->check(CLI::NonexistentPath.description(""))
             ->type_name("FILE");
 
-    classify_subcommand->add_option("--extract_file2", opt->extract_file2, "Fasta/q file for output")
+    dehost_subcommand->add_option("--extract_file2", opt->extract_file2, "Fasta/q file for output")
             ->transform(make_absolute)
             ->check(CLI::NonexistentPath.description(""))
             ->type_name("FILE");
 
-    classify_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
+    dehost_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
             ->type_name("STRING");
 
-    classify_subcommand
+    dehost_subcommand
             ->add_option("--confidence", opt->confidence_threshold, "Minimum difference between the top 2 unique hit counts.")
             ->type_name("INT")
             ->capture_default_str();
 
-    classify_subcommand
-            ->add_option("--min_hits", opt->min_hits, "Minimum difference between the top 2 (non-unique) hit counts.")
+    dehost_subcommand
+            ->add_option("--min_hits", opt->confidence_threshold, "Minimum difference between the top 2 (non-unique) hit counts.")
             ->type_name("INT")
             ->capture_default_str();
 
-    classify_subcommand
-            ->add_option("--min_length", opt->min_length, "Minimum length of read for classification.")
-            ->type_name("INT")
-            ->capture_default_str();
-
-    classify_subcommand
+    dehost_subcommand
             ->add_option("--min_diff", opt->min_proportion_difference, "Minimum difference between the proportion of (non-unique) kmers found in each category.")
             ->type_name("FLOAT")
             ->capture_default_str();
 
-    classify_subcommand->add_option("--log", opt->log_file, "File for log")
+    dehost_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
             ->type_name("FILE");
 
-    classify_subcommand->add_flag(
+    dehost_subcommand->add_flag(
         "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
 
     // Set the function that will be called when this subcommand is issued.
-    classify_subcommand->callback([opt]() { classify_main(*opt); });
+    dehost_subcommand->callback([opt]() { dehost_main(*opt); });
 }
 
-void classify_reads(const ClassifyArguments& opt, const Index& index){
-    PLOG_INFO << "Classifying file " << opt.read_file;
+void dehost_reads(const DehostArguments& opt, const Index& index){
+    PLOG_INFO << "Dehosting file " << opt.read_file;
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
     PLOG_VERBOSE << "Defined hash_adaptor";
@@ -133,7 +127,7 @@ void classify_reads(const ClassifyArguments& opt, const Index& index){
 
             const record_type & record = records[i];
             const auto read_id = split(record.id(), " ")[0];
-            const auto read_length = record.sequence().size();
+            const uint32_t read_length = std::ranges::size(record.sequence());
             if (read_length > std::numeric_limits<uint32_t>::max()){
                 PLOG_WARNING << "Ignoring read " << record.id() << " as too long!";
                 continue;
@@ -161,17 +155,17 @@ void classify_reads(const ClassifyArguments& opt, const Index& index){
 
             read.post_process(result.input_summary());
 #pragma omp critical(add_read_to_results)
-            result.add_read(read, record);
+            result.add_read(read, record, true);
         }
         records.clear();
     }
-    result.complete();
+    result.complete(true);
     result.print_summary();
 }
 
 
-void classify_paired_reads(const ClassifyArguments& opt, const Index& index){
-    PLOG_INFO << "Classifying files " << opt.read_file << " and " << opt.read_file2;
+void dehost_paired_reads(const DehostArguments& opt, const Index& index){
+    PLOG_INFO << "Dehosting files " << opt.read_file << " and " << opt.read_file2;
 
     auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}}, seqan3::window_size{index.window_size()});
     PLOG_VERBOSE << "Defined hash_adaptor";
@@ -220,7 +214,7 @@ void classify_paired_reads(const ClassifyArguments& opt, const Index& index){
                 throw std::runtime_error("Your pairs don't match for read ids.");
             }
             const auto read_id = split(record1.id(), " ")[0];
-            const auto read_length = record1.sequence().size() + record2.sequence().size();
+            const uint32_t read_length = std::ranges::size(record1.sequence()) + std::ranges::size(record2.sequence());
             if (read_length > std::numeric_limits<uint32_t>::max()){
                 PLOG_WARNING << "Ignoring read " << record1.id() << " as too long!";
                 continue;
@@ -265,7 +259,7 @@ void classify_paired_reads(const ClassifyArguments& opt, const Index& index){
 }
 
 
-int classify_main(ClassifyArguments & opt)
+int dehost_main(DehostArguments & opt)
 {
     auto log_level = plog::info;
     if (opt.verbosity == 1) {
@@ -285,10 +279,12 @@ int classify_main(ClassifyArguments & opt)
     }
 
     auto args = opt.to_string();
-    LOG_INFO << "Running charon classify\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
+    LOG_INFO << "Running charon dehost\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
 
     auto index = Index();
     load_index(index, opt.db);
+    auto host_index = index.get_host_index();
+    LOG_INFO << "Found host at index " << +host_index << " in the index categories";
 
     opt.run_extract = (opt.category_to_extract != "");
     const auto categories = index.categories();
@@ -317,9 +313,9 @@ int classify_main(ClassifyArguments & opt)
 
 
     if (opt.is_paired)
-        classify_paired_reads(opt, index);
+        dehost_paired_reads(opt, index);
     else
-        classify_reads(opt, index);
+        dehost_reads(opt, index);
 
     return 0;
 }
