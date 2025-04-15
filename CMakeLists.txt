@@ -35,6 +35,7 @@ set (CMAKE_INSTALL_BINDIR "bin")
 
 # Require OPENMP
 find_package(OpenMP REQUIRED)
+find_package( ZLIB REQUIRED )
 
 set (CPM_INDENT "CMake Package Manager CPM: ")
 include (${PROJECT_SOURCE_DIR}/cmake/CPM.cmake)
