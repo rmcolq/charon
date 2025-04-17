@@ -13,6 +13,7 @@
 
 #include <stats.hpp>
 
+#include "global.hpp"
 #include "input_summary.hpp"
 #include "classify_arguments.hpp"
 #include "dehost_arguments.hpp"
@@ -206,6 +207,52 @@ struct BetaParams {
 
 };
 
+struct KDEParams {
+    std::vector<float> dataset;
+    float h;
+
+    KDEParams(const std::vector<float> &_dataset, const float &_h) :
+            dataset{_dataset},
+            h{_h} {
+        std::sort(dataset.begin(), dataset.end());
+    }
+
+    float quantile(const float& alpha) const {
+        int idx = std::ceil((1. - alpha) * dataset.size());
+        return dataset[idx];
+    }
+
+    void fit_h() {
+        const auto iqr = quantile(0.75) - quantile(0.25);
+        const auto mu = mean(dataset);
+        const auto var = variance(dataset, mu);
+        const auto std = sqrt(var);
+        const auto A = std::min(iqr/1.34, std);
+        h = 0.9 * A * pow(dataset.size(), -0.2);
+    }
+
+    void fit(const std::vector<float> &training_data, bool is_pos) {
+        dataset = training_data;
+        /*fit_h();
+        if (is_pos)
+            h = 4*h;*/
+        PLOG_INFO << "Fitting KDE to data with factor " << h;
+    }
+
+    float K(const float & x) const {
+        return std::exp(-std::pow(x,2)/2)/sqrt(2*3.141592653589793238463);
+    }
+
+    float prob(const float & x) const {
+        float total_sum = 0;
+        for (const auto &xi : dataset){
+            total_sum += K((x - xi) / h);
+        }
+        return total_sum/(h*dataset.size());
+    }
+
+};
+
 struct ProbPair {
     double pos;
     double neg;
@@ -215,11 +262,13 @@ class Model {
 private:
     uint8_t id;
     bool ready{false};
-    std::string dist{"gamma"};
+    std::string dist{"kde"};
     GammaParams g_pos{25, 0, 0.02};
     GammaParams g_neg{10, 0, 0.005};
     BetaParams b_pos{6, 4};
     BetaParams b_neg{6, 40};
+    KDEParams k_pos{default_pos_data,0.1};
+    KDEParams k_neg{default_neg_data,0.001};
 public:
     Model() = default;
 
@@ -288,9 +337,28 @@ public:
         }
     }
 
+    void train_kde(TrainingData &training_data) {
+        assert(training_data.id == id);
+        if (training_data.pos_complete) {
+            k_pos.fit(training_data.pos, true);
+            PLOG_INFO << "Model " << +id << " fit k_pos data with KDE";
+        } else {
+            PLOG_INFO << "Model " << +id << " using default KDE for k_pos";
+        }
+
+        if (training_data.neg_complete) {
+            k_neg.fit(training_data.neg, false);
+            PLOG_INFO << "Model " << +id << " fit k_neg data with KDE";
+        } else {
+            PLOG_INFO << "Model " << +id << " using default KDE for k_neg";
+        }
+    }
+
     void train(TrainingData &training_data) {
         assert(training_data.id == id);
-        if (dist == "beta")
+        if (dist == "kde")
+            train_kde(training_data);
+        else if (dist == "beta")
             train_beta(training_data);
         else
             train_gamma(training_data);
@@ -301,10 +369,13 @@ public:
     ProbPair prob(const float &read_proportion) const {
         const auto p_err = stats::dexp(read_proportion, 300);
         float p_pos, p_neg;
-        if (dist == "gamma") {
+        if (dist == "kde") {
+            p_pos = k_pos.prob(read_proportion);
+            p_neg = k_neg.prob(read_proportion);
+        } else if (dist == "gamma") {
             p_pos = stats::dgamma(read_proportion - g_pos.loc, g_pos.shape, g_pos.scale);
             p_neg = stats::dgamma(read_proportion - g_neg.loc, g_neg.shape, g_neg.scale);
-        } else {
+        } else if (dist == "beta") {
             p_pos = stats::dbeta(read_proportion, b_pos.alpha, b_pos.beta);
             p_neg = stats::dbeta(read_proportion, b_neg.alpha, b_neg.beta);
         }
