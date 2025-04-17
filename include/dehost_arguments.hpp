@@ -18,7 +18,7 @@ struct DehostArguments {
     // Stats options
     float lo_hi_threshold {0.15};
     uint16_t num_reads_to_fit {5000};
-    std::string dist{"beta"};
+    std::string dist{"kde"};
 
     // thresholds for filtering
     float min_quality { 10.0 };

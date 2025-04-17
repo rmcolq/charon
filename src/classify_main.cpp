@@ -21,6 +21,7 @@
 #include <seqan3/utility/range/concept.hpp>
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
+
 void setup_classify_subcommand(CLI::App& app)
 {
     auto opt = std::make_shared<ClassifyArguments>();
