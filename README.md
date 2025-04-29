@@ -52,18 +52,18 @@ The category names are `[microbial, human]`.
 
 The uncompressed index has size approximately 6GB and needs to be decompressed with bgzip before use.
 
-### Classify
+### Dehost
 
-Classify `reads.fq.gz` and extract the microbial fraction:
+Classify `reads.fq.gz` using the categories in the index (one of which must be "host" or "human"):
 
 ```
-charon classify -t 8 --db <example.tab.idx> <reads.fq.gz>
+charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz>
 ```
 
 Additionally extract the microbial fraction of the input dataset
 
 ```
-charon classify -t 8 --db <example.tab.idx> <reads.fq.gz> --extract microbial --extract_file <reads.microbial.fq.gz>
+charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz> --extract microbial --extract_file <reads.microbial.fq.gz>
 ```
 
 ## Installation
@@ -83,32 +83,55 @@ make
 
 ## Usage 
 
-### Classify
+### Dehost
 ```
-Classify read file using index.
-Usage: bin/charon classify [OPTIONS] <fastaq>
+Dehost read file into host and other using index.
+Usage: bin/charon dehost [OPTIONS] <fastaq>
 
 Positionals:
-<fastaq> FILE [required]    Fasta/q file
+  <fastaq> FILE [required]              Fasta/q file
+  <fastaq> FILE                         Paired Fasta/q file
 
 Options:
--h,--help                   Print this help message and exit
---chunk_size INT            Read file is read in chunks of this size, to be processed in parallel within a chunk. [default: d]
--t,--threads INT            Maximum number of threads to use. [default: ]
---db FILE [required]        Prefix for the index.
--e,--extract STRING         Reads from this category in the index will be extracted to file.
---extract_file FILE         Fasta/q file for output
---log FILE                  File for log
--v                          Verbosity of logging. Repeat for increased verbosity
+  -h,--help                             Print this help message and exit
+  
+  --db FILE [required]                  Prefix for the index.
+  
+  -e,--extract STRING                   Reads from this category in the index will be extracted to file.
+  --extract_file FILE                   Fasta/q file for output
+  --extract_file2 FILE                  Fasta/q file for output
+  
+  --chunk_size INT                      Read file is read in chunks of this size, to be processed in parallel within a chunk. [default: 100]
+  --lo_hi_threshold FLOAT               Threshold used during model fitting stage to decide if read should be used to train lo or hi distribution. [default: 0.15]
+  --num_reads_to_fit INT                Number of reads to use to train each distribution in the model. [default: 5000]
+  -d,--dist STRING                      Probability distribution to use for modelling. [default: kde]
+  
+  --min_length INT                      Minimum read length to classify. [default: 140]
+  --min_quality INT                     Minimum read quality to classify. [default: 10]
+  --min_compression FLOAT               Minimum read gzip compression ratio to classify (a measure of how much information is in the read. [default: 0]
+  --confidence INT                      Minimum difference between the top 2 unique hit counts. [default: 2]
+  --host_unique_prop_lo_threshold INT   Require non-host reads to have unique host proportion below this threshold for classification. [default: 0.05]
+  --min_proportion_diff FLOAT           Minimum difference between the proportion of (non-unique) kmers found in each category. [default: 0.04]
+  --min_probability_diff FLOAT          Minimum difference between the probability found in each category. [default: 0]
+  
+  --log FILE                            File for log
+  -t,--threads INT                      Maximum number of threads to use. [default: ]
+  -v                                    Verbosity of logging. Repeat for increased verbosity
 ```
 Outputs:
 STDOUT a tab separated file with the following fields
+ << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
+
 1. `[U,C]` unclassified or classified
 2. `read_id`
-3. `call` which of the index catagories it has been called as ("" if no call)
-4. `length` number of hashed kmers in the read
-5. `confidence_score` the defined as log10(highest_prob/second_highest_prob). If you want the winning probability to take the call, set this to 0. For cautious use set this between 10-20. 
-6. `details` a space separated breakdown. For each category, lists `category_name:count_hits:proportion_of_hits_unique_to_category:assigned_probability`. Here the probability score is 
-the probability of seeing this combination of unique_proportions if the read comes from this category.
+3. `call` which of the index categories it has been called as ("" if no call)
+4. `length` length of read
+5. `num_hashes` number of hashed kmers in the read
+6. `mean_quality` mean quality of the read
+7. `confidence_score` the difference between the number of hits assigned uniquely to called category vs next highest (capped at 255). 
+7. `compression` the gzip compression ratio of the read, a measure of the information/complexity of the read.
+8. `details` a space separated breakdown. For each category, lists `category_name:count_hits:proportion_of_hits_for_category:proportion_of_hits_unique_to_category:assigned_probability`. 
+
+The probability score is the relative probability of seeing the number of unique hits against this category if the read is truly from the positive distribution, rather than the negative distribution.
 
 If `extract_file` and `--extract` specified, will output a file with a subset of input reads. 

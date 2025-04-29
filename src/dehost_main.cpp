@@ -222,20 +222,10 @@ void setup_dehost_subcommand(CLI::App& app)
             ->check(CLI::ExistingFile.description(""))
             ->type_name("FILE");
 
-    dehost_subcommand
-            ->add_option("--chunk_size", opt->chunk_size, "Read file is read in chunks of this size, to be processed in parallel within a chunk.")
-            ->type_name("INT")
-            ->capture_default_str();
-
-    dehost_subcommand
-        ->add_option("-t,--threads", opt->threads, "Maximum number of threads to use.")
-        ->type_name("INT")
-        ->capture_default_str();
-
     dehost_subcommand->add_option("--db", opt->db, "Prefix for the index.")
-        ->type_name("FILE")
-        ->required()
-        ->check(CLI::ExistingPath.description(""));
+            ->type_name("FILE")
+            ->required()
+            ->check(CLI::ExistingPath.description(""));
 
     dehost_subcommand->add_option("-e,--extract", opt->category_to_extract, "Reads from this category in the index will be extracted to file.")
             ->type_name("STRING");
@@ -250,8 +240,38 @@ void setup_dehost_subcommand(CLI::App& app)
             ->check(CLI::NonexistentPath.description(""))
             ->type_name("FILE");
 
+    dehost_subcommand
+            ->add_option("--chunk_size", opt->chunk_size, "Read file is read in chunks of this size, to be processed in parallel within a chunk.")
+            ->type_name("INT")
+            ->capture_default_str();
+
+    dehost_subcommand
+            ->add_option("--lo_hi_threshold", opt->lo_hi_threshold, "Threshold used during model fitting stage to decide if read should be used to train lo or hi distribution.")
+            ->type_name("FLOAT")
+            ->capture_default_str();
+
+    dehost_subcommand
+            ->add_option("--num_reads_to_fit", opt->num_reads_to_fit, "Number of reads to use to train each distribution in the model.")
+            ->type_name("INT")
+            ->capture_default_str();
+
     dehost_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
             ->type_name("STRING");
+
+    dehost_subcommand
+            ->add_option("--min_length", opt->min_length, "Minimum read length to classify.")
+            ->type_name("INT")
+            ->capture_default_str();
+
+    dehost_subcommand
+            ->add_option("--min_quality", opt->min_quality, "Minimum read quality to classify.")
+            ->type_name("INT")
+            ->capture_default_str();
+
+    dehost_subcommand
+            ->add_option("--min_compression", opt->min_compression, "Minimum read gzip compression ratio to classify (a measure of how much information is in the read.")
+            ->type_name("FLOAT")
+            ->capture_default_str();
 
     dehost_subcommand
             ->add_option("--confidence", opt->confidence_threshold, "Minimum difference between the top 2 unique hit counts.")
@@ -259,18 +279,27 @@ void setup_dehost_subcommand(CLI::App& app)
             ->capture_default_str();
 
     dehost_subcommand
-            ->add_option("--min_hits", opt->confidence_threshold, "Minimum difference between the top 2 (non-unique) hit counts.")
+            ->add_option("--host_unique_prop_lo_threshold", opt->host_unique_prop_lo_threshold, "Require non-host reads to have unique host proportion below this threshold for classification.")
             ->type_name("INT")
             ->capture_default_str();
 
     dehost_subcommand
-            ->add_option("--min_diff", opt->min_proportion_difference, "Minimum difference between the proportion of (non-unique) kmers found in each category.")
+            ->add_option("--min_proportion_diff", opt->min_proportion_difference, "Minimum difference between the proportion of (non-unique) kmers found in each category.")
+            ->type_name("FLOAT")
+            ->capture_default_str();
+    dehost_subcommand
+            ->add_option("--min_probability_diff", opt->min_prob_difference, "Minimum difference between the probability found in each category.")
             ->type_name("FLOAT")
             ->capture_default_str();
 
     dehost_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
             ->type_name("FILE");
+
+    dehost_subcommand
+            ->add_option("-t,--threads", opt->threads, "Maximum number of threads to use.")
+            ->type_name("INT")
+            ->capture_default_str();
 
     dehost_subcommand->add_flag(
         "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
