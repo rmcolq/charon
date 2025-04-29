@@ -23,11 +23,11 @@ struct DehostArguments {
     // thresholds for filtering
     float min_quality { 10.0 };
     uint32_t min_length { 140 };
-    float min_compression {0.15};
+    float min_compression {0};
     uint8_t confidence_threshold{2};
-    float host_unique_prop_hi_threshold{ 0.1 };
     float host_unique_prop_lo_threshold{ 0.05 };
     float min_proportion_difference { 0.04 };
+    float min_prob_difference{ 0 };
 
     // Output options
     bool run_extract {false};
@@ -46,10 +46,14 @@ struct DehostArguments {
 
         ss += "\n\nDehost Arguments:\n\n";
         ss += "\tread_file:\t\t" + read_file.string() + "\n";
+        ss += "\tread_file2:\t\t" + read_file2.string() + "\n";
         ss += "\tdb:\t\t\t" + db + "\n\n";
 
-        ss += "\tchunk_size:\t\t" + std::to_string(chunk_size) + "\n\n";
+        ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
+        ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";
+        ss += "\textract_file2:\t\t" + extract_file2.string() + "\n\n";
 
+        ss += "\tchunk_size:\t\t" + std::to_string(chunk_size) + "\n\n";
         ss += "\tlo_hi_threshold:\t\t" + std::to_string(lo_hi_threshold) + "\n";
         ss += "\tnum_reads_to_fit:\t" + std::to_string(num_reads_to_fit) + "\n";
         ss += "\tdist:\t\t" + dist + "\n\n";
@@ -58,12 +62,11 @@ struct DehostArguments {
         ss += "\tmin_quality:\t\t" + std::to_string(min_quality) + "\n";
         ss += "\tmin_compression:\t\t" + std::to_string(min_compression) + "\n";
         ss += "\tconfidence_threshold:\t" + std::to_string(confidence_threshold) + "\n";
-        ss += "\thost_unique_prop_lo_hreshold:\t" + std::to_string(host_unique_prop_lo_threshold) + "\n";
-        ss += "\thost_unique_prop_hi_threshold:\t" + std::to_string(host_unique_prop_hi_threshold) + "\n";
+        ss += "\thost_unique_prop_lo_threshold:\t" + std::to_string(host_unique_prop_lo_threshold) + "\n";
         ss += "\tmin_proportion_difference:\t\t" + std::to_string(min_proportion_difference) + "\n\n";
-        
-        ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
-        ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";
+        ss += "\tmin_prob_difference:\t\t" + std::to_string(min_prob_difference) + "\n\n";
+
+
 
         ss += "\tlog_file:\t\t" + log_file + "\n";
         ss += "\tthreads:\t\t" + std::to_string(threads) + "\n";

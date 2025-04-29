@@ -236,6 +236,8 @@ public:
 
         double host_unique_prop = unique_proportions_.at(host_index);
         double other_unique_prop = unique_proportions_.at(other_index);
+        double host_prob = probabilities_.at(host_index);
+        double other_prob = probabilities_.at(other_index);
 
         auto first_pos = host_index;
         auto second_pos = other_index;
@@ -265,9 +267,16 @@ public:
             return;
         }
 
-        if (host_unique_prop > other_unique_prop and host_unique_prop - other_unique_prop > stats_model.min_proportion_difference())
+        if (host_unique_prop > other_unique_prop
+            and host_unique_prop - other_unique_prop > stats_model.min_proportion_difference()
+            and host_prob > other_prob
+            and host_prob - other_prob > stats_model.min_prob_difference())
             call_ = host_index;
-        else if (host_unique_prop < stats_model.host_unique_prop_lo_threshold() and host_unique_prop < other_unique_prop and other_unique_prop - host_unique_prop > stats_model.min_proportion_difference())
+        else if (host_unique_prop < stats_model.host_unique_prop_lo_threshold()
+            and host_unique_prop < other_unique_prop
+            and other_unique_prop - host_unique_prop > stats_model.min_proportion_difference()
+            and host_prob < other_prob
+            and other_prob - host_prob > stats_model.min_prob_difference())
             call_ = other_index;
     }
 
