@@ -16,7 +16,7 @@ COPY src /charon/src
 COPY include /charon/include
 COPY cmake /charon/cmake
 COPY lib /charon/lib
-COPY CMakeLists.txt /charon
+COPY CMakeLists.txt version.h.in /charon
 WORKDIR /charon/build
 
 RUN cmake -DCMAKE_BUILD_TYPE=RELEASE .. > cmake.log 
