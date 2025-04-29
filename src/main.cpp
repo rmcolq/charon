@@ -5,7 +5,7 @@
 #include "index_main.hpp"
 #include "classify_main.hpp"
 #include "dehost_main.hpp"
-#include "version.h.in"
+#include "version.h"
 
 class MyFormatter : public CLI::Formatter {
 public:
