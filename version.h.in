@@ -1,0 +1,8 @@
+#ifndef CHARON_VERSION_H_IN
+#define CHARON_VERSION_H_IN
+
+#pragma once
+
+#define SOFTWARE_VERSION "@CHARON_VERSION@"
+
+#endif

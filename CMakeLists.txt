@@ -5,7 +5,7 @@ set(PROJECT_NAME_STR charon)
 cmake_minimum_required( VERSION 3.9 FATAL_ERROR )
 
 add_custom_target(version
-        ${CMAKE_COMMAND} -D SRC=${CMAKE_SOURCE_DIR}/include/version.h.in
+        ${CMAKE_COMMAND} -D SRC=${CMAKE_SOURCE_DIR}/version.h.in
         -D DST=${CMAKE_SOURCE_DIR}/include/version.h
         -P ${CMAKE_SOURCE_DIR}/cmake/GenerateVersion.cmake
 )
