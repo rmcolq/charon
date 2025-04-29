@@ -402,9 +402,10 @@ private:
     float min_compression_;
     int8_t confidence_threshold_;
     uint8_t min_hits_;
-    float host_unique_prop_hi_threshold_;
     float host_unique_prop_lo_threshold_;
     float min_proportion_difference_;
+    float min_prob_difference_;
+
 
     std::vector<TrainingData> training_data_;
     std::vector<Model> models_;
@@ -443,9 +444,9 @@ public:
             min_length_(opt.min_length),
             min_compression_(opt.min_compression),
             confidence_threshold_(opt.confidence_threshold),
-            host_unique_prop_hi_threshold_(opt.host_unique_prop_hi_threshold),
             host_unique_prop_lo_threshold_(opt.host_unique_prop_lo_threshold),
-            min_proportion_difference_(opt.min_proportion_difference) {
+            min_proportion_difference_(opt.min_proportion_difference),
+            min_prob_difference_(opt.min_prob_difference){
         for (auto i = 0; i < summary.num_categories(); ++i) {
             models_.emplace_back(Model(i, opt.dist));
             training_data_.emplace_back(TrainingData(opt, i));
@@ -499,16 +500,16 @@ public:
         return min_hits_;
     }
 
-    float host_unique_prop_hi_threshold() const {
-        return host_unique_prop_hi_threshold_;
-    }
-
     float host_unique_prop_lo_threshold() const {
         return host_unique_prop_lo_threshold_;
     }
 
     float min_proportion_difference() const {
         return min_proportion_difference_;
+    }
+
+    float min_prob_difference() const {
+        return min_prob_difference_;
     }
 
     void train_model_at(const uint8_t &i) {
