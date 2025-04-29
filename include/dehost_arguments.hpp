@@ -21,7 +21,7 @@ struct DehostArguments {
     std::string dist{"kde"};
 
     // thresholds for filtering
-    float min_quality { 10.0 };
+    float min_quality { 15.0 };
     uint32_t min_length { 140 };
     float min_compression {0};
     uint8_t confidence_threshold{2};
