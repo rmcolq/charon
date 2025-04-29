@@ -119,8 +119,6 @@ Options:
   -v                                    Verbosity of logging. Repeat for increased verbosity
 ```
 Outputs:
-STDOUT a tab separated file with the following fields
- << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
 
 1. `[U,C]` unclassified or classified
 2. `read_id`
