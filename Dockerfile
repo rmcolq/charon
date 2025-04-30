@@ -16,6 +16,7 @@ COPY src /charon/src
 COPY include /charon/include
 COPY cmake /charon/cmake
 COPY lib /charon/lib
+COPY .git /charon/.git
 COPY CMakeLists.txt version.h.in /charon
 WORKDIR /charon/build
 
