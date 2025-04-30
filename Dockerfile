@@ -1,5 +1,7 @@
 FROM ubuntu:24.04
 
+ARG is_dev
+
 RUN apt update
 RUN DEBIAN_FRONTEND=noninteractive apt-get install -y \
     gcc-14 g++-14 \
@@ -11,13 +13,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y \
 RUN update-alternatives --install /usr/bin/g++ g++ /bin/g++-14 14 
 RUN update-alternatives --install /usr/bin/gcc gcc /bin/gcc-14 14
 
-RUN mkdir -p /charon
-COPY src /charon/src
-COPY include /charon/include
-COPY cmake /charon/cmake
-COPY lib /charon/lib
-COPY .git /charon/.git
-COPY CMakeLists.txt version.h.in /charon
+WORKDIR /
+RUN if [[ -z "$is_dev" ]] ; then git clone -b dev https://github.com/rmcolq/charon.git; else git clone https://github.com/rmcolq/charon.git; fi
 WORKDIR /charon/build
 
 RUN cmake -DCMAKE_BUILD_TYPE=RELEASE .. > cmake.log 
