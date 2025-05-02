@@ -41,4 +41,6 @@ size_t max_num_hashes_for_fpr(const IndexArguments & opt);
 std::string sequence_to_string(const __type_pack_element<0, std::vector<seqan3::dna5>, std::string, std::vector<seqan3::phred94>>& input);
 
 float get_compression_ratio(const std::string& sequence);
+
+std::string get_extension(const std::filesystem::path);
 #endif

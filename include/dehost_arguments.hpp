@@ -12,8 +12,14 @@ struct DehostArguments {
     std::filesystem::path read_file2;
     bool is_paired { false };
     std::string db;
-    uint8_t chunk_size { 100 };
 
+    // Output options
+    bool run_extract {false};
+    std::string category_to_extract;
+    std::string prefix;
+    std::unordered_map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
+
+    uint8_t chunk_size { 100 };
 
     // Stats options
     float lo_hi_threshold {0.15};
@@ -29,11 +35,7 @@ struct DehostArguments {
     float min_proportion_difference { 0.04 };
     float min_prob_difference{ 0 };
 
-    // Output options
-    bool run_extract {false};
-    std::string category_to_extract;
-    std::filesystem::path extract_file;
-    std::filesystem::path extract_file2;
+
 
     // General options
     std::string log_file {"charon.log"};
@@ -50,8 +52,7 @@ struct DehostArguments {
         ss += "\tdb:\t\t\t" + db + "\n\n";
 
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
-        ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";
-        ss += "\textract_file2:\t\t" + extract_file2.string() + "\n\n";
+        ss += "\tprefix:\t" + prefix + "\n\n";
 
         ss += "\tchunk_size:\t\t" + std::to_string(chunk_size) + "\n\n";
         ss += "\tlo_hi_threshold:\t\t" + std::to_string(lo_hi_threshold) + "\n";

@@ -57,15 +57,10 @@ void setup_classify_subcommand(CLI::App& app)
     classify_subcommand->add_option("-e,--extract", opt->category_to_extract, "Reads from this category in the index will be extracted to file.")
             ->type_name("STRING");
 
-    classify_subcommand->add_option("--extract_file", opt->extract_file, "Fasta/q file for output")
-            ->transform(make_absolute)
+    classify_subcommand->add_option("-p,--prefix", opt->prefix, "Prefix for the output files.")
+            ->type_name("FILE")
             ->check(CLI::NonexistentPath.description(""))
-            ->type_name("FILE");
-
-    classify_subcommand->add_option("--extract_file2", opt->extract_file2, "Fasta/q file for output")
-            ->transform(make_absolute)
-            ->check(CLI::NonexistentPath.description(""))
-            ->type_name("FILE");
+            ->default_str("<prefix>");
 
     classify_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
             ->type_name("STRING");
@@ -293,21 +288,31 @@ int classify_main(ClassifyArguments & opt)
 
     opt.run_extract = (opt.category_to_extract != "");
     const auto categories = index.categories();
-    if (opt.run_extract and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
+    if (opt.run_extract and opt.category_to_extract != "all" and std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end())
     {
         std::string options = "";
         for (auto i: categories)
             options += i + " ";
-        PLOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ " << options << "]";
+        PLOG_ERROR << "Cannot extract " << opt.category_to_extract << ", please chose one of [ all " << options << "]";
         return 1;
-    } else if (opt.run_extract and opt.extract_file == ""){
-        opt.extract_file = opt.read_file;
-        if (opt.is_paired){
-            opt.extract_file.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
-            opt.extract_file2 = opt.read_file2;
-            opt.extract_file2.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
-        } else
-            opt.extract_file.replace_extension(opt.category_to_extract + opt.read_file.extension().string());
+    } else if (opt.run_extract){
+        if (opt.prefix == "")
+            opt.prefix = "charon";
+        std::vector<std::string> to_extract;
+        if (opt.category_to_extract == "all")
+            to_extract = categories;
+        else
+            to_extract.push_back(opt.category_to_extract);
+        const auto extension = get_extension(opt.read_file);
+        for (const auto & category : to_extract){
+            const auto category_index = index.get_category_index(category);
+            if (opt.is_paired) {
+                opt.extract_category_to_file[category_index].push_back(opt.prefix + "_" + category + "_1" + extension + ".gz");
+                opt.extract_category_to_file[category_index].push_back(opt.prefix + "_" + category + "_2" + extension + ".gz");
+            } else {
+                opt.extract_category_to_file[category_index].push_back(opt.prefix + "_" + category + extension + ".gz");
+            }
+        }
     }
 
     if (opt.dist != "gamma" and opt.dist != "beta")
