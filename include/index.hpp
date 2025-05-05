@@ -81,6 +81,15 @@ class Index
             return index;
         }
 
+        uint8_t get_category_index(const std::string category) const
+        {
+            const auto index = summary_.category_index(category);
+            if (index == std::numeric_limits<uint8_t>::max())
+                PLOG_ERROR << "Index does not contain category ";
+            assert(index < std::numeric_limits<uint8_t>::max());
+            return index;
+        }
+
         double max_fpr() const
         {
             return max_fpr_;

@@ -129,3 +129,11 @@ float get_compression_ratio(const std::string& sequence){
     return static_cast<double>(compressed_size)/static_cast<double>(initial_size);
 }
 
+std::string get_extension(const std::filesystem::path read_file){
+    auto ext = read_file.extension().string();
+    if (ext == ".gz"){
+        std::filesystem::path short_read_file = read_file.stem();
+        ext = short_read_file.extension().string();
+    }
+    return ext;
+}

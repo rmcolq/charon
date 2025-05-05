@@ -32,8 +32,8 @@ struct ClassifyArguments {
     // Output options
     bool run_extract {false};
     std::string category_to_extract;
-    std::filesystem::path extract_file;
-    std::filesystem::path extract_file2;
+    std::string prefix;
+    std::unordered_map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
 
     // General options
     std::string log_file {"charon.log"};
@@ -62,7 +62,7 @@ struct ClassifyArguments {
         ss += "\tmin_diff:\t\t" + std::to_string(min_proportion_difference) + "\n\n";
 
         ss += "\tcategory_to_extract:\t" + category_to_extract + "\n";
-        ss += "\textract_file:\t\t" + extract_file.string() + "\n\n";
+        ss += "\tprefix:\t" + prefix + "\n\n";
 
         ss += "\tlog_file:\t\t" + log_file + "\n";
         ss += "\tthreads:\t\t" + std::to_string(threads) + "\n";
