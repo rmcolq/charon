@@ -1,9 +1,9 @@
 # Charon
 _Clean Host Associated Reads Out Nanopore_
 
-Probabilistically identify the host and microbial reads in a metagenomic dataset.
+<img src="./docs/charon_logo.svg" width="400">
 
-UNDER ACTIVE DEVELOPMENT - this tool may not work out of the box but feel free to try it/make suggestions and watch the repo to be informed of releases!
+Probabilistically identify the host and microbial reads in a metagenomic dataset.
 
 [TOC]: #
 
@@ -27,6 +27,15 @@ scores which could be used to set an acceptable threshold for e.g. releasing met
 
 ## Quick Start
 
+### Download an Index
+
+Alternatively, a pre-built index for long reads is available via [Zenodo](https://zenodo.org/records/15398095). 
+
+This index includes references from [HPRC](https://humanpangenome.org/) and representatives of Bacteria, Viruses, Archaea, Fungi and Sar with (mostly complete) genomes downloaded from NCBI RefSeq, including FDA-ARGOS.
+The category names are `[microbial, human]`. 
+
+The compressed index has size approximately 39GB and needs to be decompressed with gzip before use.
+
 ### Build an Index
 
 This takes a tab separated file as input; the first column specifies the path to a reference file, the second column specified the name of the category which they belong to.
@@ -43,15 +52,6 @@ The index can then be built with:
 charon index -t 8 <example.tab>
 ```
 
-### Download an Index
-
-Alternatively, a pre-built index is available if you know a free way to make a 4.1GB file publicly available. 
-
-This index includes 10 references from [HPRC](https://humanpangenome.org/) and representatives of Bacteria, Viruses, Archaea and Fungi with complete genomes downloaded from NCBI RefSeq.
-The category names are `[microbial, human]`. 
-
-The uncompressed index has size approximately 6GB and needs to be decompressed with bgzip before use.
-
 ### Dehost
 
 Classify `reads.fq.gz` using the categories in the index (one of which must be "host" or "human"):
@@ -63,13 +63,19 @@ charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz>
 Additionally extract the microbial fraction of the input dataset
 
 ```
-charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz> --extract microbial --extract_file <reads.microbial.fq.gz>
+charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz> --extract microbial --prefix <prefix>
 ```
 
 ## Installation
 
-Currently available to build from source. 
-It has been developed on MacOS and Unix. 
+### Docker image
+A docker image is hosted on dockerhub and can be pulled using
+```
+docker pull rmcolq/charon
+```
+
+### Building from source
+Charon has been developed on MacOS and Unix. 
 Requires a compiler for C++14 and cmake > 3.9.
 
 ```
@@ -97,9 +103,8 @@ Options:
   
   --db FILE [required]                  Prefix for the index.
   
-  -e,--extract STRING                   Reads from this category in the index will be extracted to file.
-  --extract_file FILE                   Fasta/q file for output
-  --extract_file2 FILE                  Fasta/q file for output
+  -e,--extract STRING                   Reads from this category in the index will be extracted to file (options host, microbial, all).
+  --prefix PATH                         Prefix path for output extracted read files
   
   --chunk_size INT                      Read file is read in chunks of this size, to be processed in parallel within a chunk. [default: 100]
   --lo_hi_threshold FLOAT               Threshold used during model fitting stage to decide if read should be used to train lo or hi distribution. [default: 0.15]
@@ -107,7 +112,7 @@ Options:
   -d,--dist STRING                      Probability distribution to use for modelling. [default: kde]
   
   --min_length INT                      Minimum read length to classify. [default: 140]
-  --min_quality INT                     Minimum read quality to classify. [default: 10]
+  --min_quality INT                     Minimum read quality to classify. [default: 15]
   --min_compression FLOAT               Minimum read gzip compression ratio to classify (a measure of how much information is in the read. [default: 0]
   --confidence INT                      Minimum difference between the top 2 unique hit counts. [default: 2]
   --host_unique_prop_lo_threshold INT   Require non-host reads to have unique host proportion below this threshold for classification. [default: 0.05]
@@ -132,4 +137,4 @@ Outputs:
 
 The probability score is the relative probability of seeing the number of unique hits against this category if the read is truly from the positive distribution, rather than the negative distribution.
 
-If `extract_file` and `--extract` specified, will output a file with a subset of input reads. 
+If `extract_file` and `--prefix` specified, will output a file with a subset of input reads belonging to the names index category. Specifying `--extract all` will generate a file for both host and microbial reads (excludes unclassified).
