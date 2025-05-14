@@ -5,8 +5,6 @@ _Clean Host Associated Reads Out Nanopore_
 
 Probabilistically identify the host and microbial reads in a metagenomic dataset.
 
-UNDER ACTIVE DEVELOPMENT - this tool may not work out of the box but feel free to try it/make suggestions and watch the repo to be informed of releases!
-
 [TOC]: #
 
 # Table of Contents
