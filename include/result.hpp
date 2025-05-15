@@ -194,7 +194,6 @@ class Result
                 auto & read_entry = read_record.read;
                 const auto & record = read_record.record;
                 auto category_index = classify_read(read_entry, dehost);
-                std::cout << +category_index <<  (category_index < std::numeric_limits<uint8_t>::max()) << std::endl;
                 if (run_extract_ and extract_handles_.find(category_index) != extract_handles_.end()){
                     if (read_record.is_paired)
                     {
