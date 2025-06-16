@@ -31,6 +31,7 @@ struct DehostArguments {
     uint32_t min_length { 140 };
     float min_compression {0};
     uint8_t confidence_threshold{2};
+    float confidence_probability_threshold{5};
     float host_unique_prop_lo_threshold{ 0.05 };
     float min_proportion_difference { 0.04 };
     float min_prob_difference{ 0 };
@@ -63,6 +64,7 @@ struct DehostArguments {
         ss += "\tmin_quality:\t\t\t" + std::to_string(min_quality) + "\n";
         ss += "\tmin_compression:\t\t" + std::to_string(min_compression) + "\n";
         ss += "\tconfidence_threshold:\t\t" + std::to_string(confidence_threshold) + "\n";
+        ss += "\tconfidence_probability_threshold:\t\t" + std::to_string(confidence_probability_threshold) + "\n";
         ss += "\thost_unique_prop_lo_threshold:\t" + std::to_string(host_unique_prop_lo_threshold) + "\n";
         ss += "\tmin_proportion_difference:\t" + std::to_string(min_proportion_difference) + "\n";
         ss += "\tmin_prob_difference:\t\t" + std::to_string(min_prob_difference) + "\n\n";

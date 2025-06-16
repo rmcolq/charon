@@ -270,13 +270,15 @@ public:
         if (host_unique_prop > other_unique_prop
             and host_unique_prop - other_unique_prop > stats_model.min_proportion_difference()
             and host_prob > other_prob
-            and host_prob - other_prob > stats_model.min_prob_difference())
+            and host_prob - other_prob > stats_model.min_prob_difference()
+            and std::max(host_prob * confidence_score_,static_cast<double>(confidence_score_)) >= stats_model.confidence_probability_threshold())
             call_ = host_index;
         else if (host_unique_prop < stats_model.host_unique_prop_lo_threshold()
             and host_unique_prop < other_unique_prop
             and other_unique_prop - host_unique_prop > stats_model.min_proportion_difference()
             and host_prob < other_prob
-            and other_prob - host_prob > stats_model.min_prob_difference())
+            and other_prob - host_prob > stats_model.min_prob_difference()
+            and std::max(other_prob * confidence_score_,static_cast<double>(confidence_score_)) >= stats_model.confidence_probability_threshold())
             call_ = other_index;
     }
 
