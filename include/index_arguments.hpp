@@ -17,7 +17,7 @@ struct IndexArguments {
     uint8_t kmer_size { 19 };
 
     // IBF options
-    mutable size_t bits {std::numeric_limits<uint32_t>::max()}; // Allow to change bits for each partition
+    mutable size_t bits {std::numeric_limits<uint32_t>::max()-2}; // Allow to change bits for each partition
     uint8_t num_hash {3};
     double max_fpr {0.01};
 
