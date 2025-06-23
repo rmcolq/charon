@@ -430,7 +430,6 @@ public:
             min_length_(opt.min_length),
             min_compression_(opt.min_compression),
             confidence_threshold_(opt.confidence_threshold),
-            min_hits_(opt.min_hits),
             min_proportion_difference_(opt.min_proportion_difference) {
         for (auto i = 0; i < summary.num_categories(); ++i) {
             models_.emplace_back(Model(i, opt.dist));

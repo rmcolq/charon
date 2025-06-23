@@ -21,7 +21,7 @@ private:
     float compression_;
 
     uint32_t num_hashes_{0};
-    std::vector<seqan3::interleaved_bloom_filter< seqan3::compressed >::membership_agent_type::binning_bitvector> bits_;// this collects over all bins
+    std::vector<seqan3::interleaved_bloom_filter<seqan3::compressed>::membership_agent_type::binning_bitvector> bits_;// this collects over all bins
     std::unordered_map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
     std::vector<uint32_t> counts_;
     std::vector<uint32_t> unique_counts_;
@@ -43,17 +43,17 @@ public:
 
     ~ReadEntry() = default;
 
-    ReadEntry(const std::string& read_id, const uint32_t& length, const float& mean_quality, const float& compression, const InputSummary &summary) :
+    ReadEntry(const std::string &read_id, const uint32_t &length, const float &mean_quality, const float &compression,
+              const InputSummary &summary) :
             read_id_(read_id),
             length_(length),
             mean_quality_(mean_quality),
             compression_(compression),
             counts_(summary.num_categories(), 0),
-            proportions_(summary.num_categories(),0),
-            unique_proportions_(summary.num_categories(),0),
+            proportions_(summary.num_categories(), 0),
+            unique_proportions_(summary.num_categories(), 0),
             unique_counts_(summary.num_categories(), 0),
-            probabilities_(summary.num_categories(),1)
-    {
+            probabilities_(summary.num_categories(), 1) {
         PLOG_DEBUG << "Initialize entry with read_id " << read_id << " and length " << length;
         bits_.reserve(length);
 
@@ -63,15 +63,15 @@ public:
         PLOG_VERBOSE << "Initializing complete for read_id " << read_id;
     }
 
-    const std::string& read_id() const {
+    const std::string &read_id() const {
         return read_id_;
     }
 
-    const std::vector<float>& proportions() const {
+    const std::vector<float> &proportions() const {
         return proportions_;
     }
 
-    const std::vector<float>& unique_proportions() const {
+    const std::vector<float> &unique_proportions() const {
         return unique_proportions_;
     }
 
@@ -94,20 +94,19 @@ public:
 
         // get totals in each bin
         seqan3::counting_vector<uint64_t> total_bits_per_bin(summary.num_bins, 0);
-        for (const auto & entry : bits_)
-        {
+        for (const auto &entry: bits_) {
             total_bits_per_bin += entry;
         }
         PLOG_DEBUG << "Have the following total hits per bin: " << total_bits_per_bin;
 
         // identify max bin per category
-        std::vector<uint8_t> index_per_category(summary.num_categories(),std::numeric_limits<uint8_t>::max());
-        for ( auto bin=0; bin < total_bits_per_bin.size(); ++bin)
-        {
-            const auto & bits_in_bin = total_bits_per_bin[bin];
-            const auto & category = summary.bin_to_category.at(bin);
-            const auto & index = summary.category_index(category);
-            if (index_per_category.at(index) == std::numeric_limits<uint8_t>::max() or total_bits_per_bin[bin] > total_bits_per_bin[index_per_category[index]]) {
+        std::vector<uint8_t> index_per_category(summary.num_categories(), std::numeric_limits<uint8_t>::max());
+        for (auto bin = 0; bin < total_bits_per_bin.size(); ++bin) {
+            const auto &bits_in_bin = total_bits_per_bin[bin];
+            const auto &category = summary.bin_to_category.at(bin);
+            const auto &index = summary.category_index(category);
+            if (index_per_category.at(index) == std::numeric_limits<uint8_t>::max() or
+                total_bits_per_bin[bin] > total_bits_per_bin[index_per_category[index]]) {
                 index_per_category.at(index) = bin;
                 counts_.at(index) = total_bits_per_bin[bin];
                 PLOG_DEBUG << "Category " << category << " has max index " << +bin;
@@ -121,14 +120,12 @@ public:
 
         // collect together the bitvector for max bits and the unique_counts
         std::vector<uint8_t> found;
-        for (const auto & entry : bits_){
+        for (const auto &entry: bits_) {
             found.clear();
-            for (auto category=0; category < index_per_category.size(); ++category)
-            {
-                const auto & category_index = index_per_category[category];
+            for (auto category = 0; category < index_per_category.size(); ++category) {
+                const auto &category_index = index_per_category[category];
                 max_bits_.at(category).emplace_back(entry[category_index]);
-                if (entry[category_index] == 1)
-                {
+                if (entry[category_index] == 1) {
                     found.push_back(category);
                 }
             }
@@ -158,31 +155,22 @@ public:
     }
 
     void call_category(const StatsModel &stats_model) {
-        //TODO extend this to work with more than 2 categories
-        assert(probabilities_.size() == 2);
-
-        double first = probabilities_.at(0);
+        // We want to compare based on unique_counts_ because confidence is defined based on the difference of the
+        // top 2 unique_counts_. However, we will reject the result if the probabilities do not support this ordering.
         uint8_t first_pos = 0;
-        double second = probabilities_.at(1);
         uint8_t second_pos = 1;
-        if (unique_counts_.at(second_pos) > unique_counts_.at(first_pos))
-        {
-            std::swap(first, second);
+        if (unique_counts_.at(second_pos) > unique_counts_.at(first_pos)) {
             std::swap(first_pos, second_pos);
         }
 
-        /*for (auto i = 0; i < probabilities_.size(); ++i) {
-            const double &val = probabilities_.at(i);
-            if (val >= second) {
-                second = val;
+        for (auto i = 2; i < unique_counts_.size(); ++i) {
+            if (unique_counts_.at(i) > unique_counts_.at(second_pos)) {
                 second_pos = i;
-                if (second >= first)
-                {
-                    std::swap(first, second);
+                if (unique_counts_.at(second_pos) > unique_counts_.at(first_pos)) {
                     std::swap(first_pos, second_pos);
                 }
             }
-        }*/
+        }
 
         auto raw_confidence = unique_counts_.at(first_pos) - unique_counts_.at(second_pos);
         if (raw_confidence > std::numeric_limits<uint8_t>::max())
@@ -190,49 +178,46 @@ public:
         else
             confidence_score_ = static_cast<uint8_t>(raw_confidence);
 
-        if (mean_quality_ < stats_model.min_quality()){
+        if (mean_quality_ < stats_model.min_quality()) {
             return;
         }
 
-        if (length_ < stats_model.min_length()){
+        if (length_ < stats_model.min_length()) {
             return;
         }
 
-        if (compression_ < stats_model.min_compression()){
+        if (compression_ < stats_model.min_compression()) {
             return;
         }
 
-        if (second == 0 and first > 0) {
+        if (probabilities_.at(second_pos) == 0 and probabilities_.at(first_pos) > 0) {
             call_ = first_pos;
         } else {
-            /*auto ratio = first/second;
-            PLOG_VERBOSE << "confidence score " << ratio << " from " << first << "/" << second;
-            if (ratio < std::numeric_limits<uint8_t>::max())
-                confidence_score_ = static_cast<uint8_t>(ratio);
-            else
-                confidence_score_ = std::numeric_limits<uint8_t>::max();*/
-            if (confidence_score_ > stats_model.confidence_threshold() and first > second)
+            if (confidence_score_ > stats_model.confidence_threshold() and
+                probabilities_.at(first_pos) > probabilities_.at(second_pos))
                 call_ = first_pos;
         }
 
-        const auto & first_count = counts_.at(first_pos);
-        const auto & second_count = counts_.at(second_pos);
-        if (second_count > first_count or first_count - second_count < stats_model.min_num_hits()){
-            PLOG_DEBUG << read_id_ << " has first count " << +first_count << " and second count " << +second_count << " which have differences less than " << +stats_model.min_num_hits();
+        const auto &first_count = counts_.at(first_pos);
+        const auto &second_count = counts_.at(second_pos);
+        if (second_count > first_count or first_count - second_count < stats_model.min_num_hits()) {
+            PLOG_DEBUG << read_id_ << " has first count " << +first_count << " and second count " << +second_count
+                       << " which have differences less than " << +stats_model.min_num_hits();
             call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this number of hits difference, then no call
         }
 
-        const auto & first_prop = proportions_.at(first_pos);
-        const auto & second_prop = proportions_.at(second_pos);
-        if (second_prop > first_prop or first_prop - second_prop < stats_model.min_proportion_difference()){
-            PLOG_DEBUG << read_id_ << " has first proportion " << first_prop << " and second proportion " << second_prop << " which have differences less than " << stats_model.min_proportion_difference();
+        const auto &first_prop = proportions_.at(first_pos);
+        const auto &second_prop = proportions_.at(second_pos);
+        if (second_prop > first_prop or first_prop - second_prop < stats_model.min_proportion_difference()) {
+            PLOG_DEBUG << read_id_ << " has first proportion " << first_prop << " and second proportion " << second_prop
+                       << " which have differences less than " << stats_model.min_proportion_difference();
             call_ = std::numeric_limits<uint8_t>::max(); // if we don't see at least this level of discrepancy between the proportion hitting against each database don't call
         }
     }
 
     void call_host(const StatsModel &stats_model, const uint8_t host_index) {
         assert(probabilities_.size() == 2);
-        const uint8_t other_index = 1-host_index;
+        const uint8_t other_index = 1 - host_index;
 
         double host_unique_prop = unique_proportions_.at(host_index);
         double other_unique_prop = unique_proportions_.at(other_index);
@@ -241,8 +226,7 @@ public:
 
         auto first_pos = host_index;
         auto second_pos = other_index;
-        if (host_unique_prop < other_unique_prop)
-        {
+        if (host_unique_prop < other_unique_prop) {
             first_pos = other_index;
             second_pos = host_index;
         }
@@ -251,19 +235,19 @@ public:
             confidence_score_ = std::numeric_limits<uint8_t>::max();
         else
             confidence_score_ = static_cast<uint8_t>(raw_confidence);
-        if (confidence_score_ < stats_model.confidence_threshold()){
+        if (confidence_score_ < stats_model.confidence_threshold()) {
             return;
         }
 
-        if (mean_quality_ < stats_model.min_quality()){
+        if (mean_quality_ < stats_model.min_quality()) {
             return;
         }
 
-        if (length_ < stats_model.min_length()){
+        if (length_ < stats_model.min_length()) {
             return;
         }
 
-        if (compression_ < stats_model.min_compression()){
+        if (compression_ < stats_model.min_compression()) {
             return;
         }
 
@@ -271,14 +255,16 @@ public:
             and host_unique_prop - other_unique_prop > stats_model.min_proportion_difference()
             and host_prob > other_prob
             and host_prob - other_prob > stats_model.min_prob_difference()
-            and std::max(host_prob * confidence_score_,static_cast<double>(confidence_score_)) >= stats_model.confidence_probability_threshold())
+            and std::max(host_prob * confidence_score_, static_cast<double>(confidence_score_)) >=
+                stats_model.confidence_probability_threshold())
             call_ = host_index;
         else if (host_unique_prop < stats_model.host_unique_prop_lo_threshold()
-            and host_unique_prop < other_unique_prop
-            and other_unique_prop - host_unique_prop > stats_model.min_proportion_difference()
-            and host_prob < other_prob
-            and other_prob - host_prob > stats_model.min_prob_difference()
-            and std::max(other_prob * confidence_score_,static_cast<double>(confidence_score_)) >= stats_model.confidence_probability_threshold())
+                 and host_unique_prop < other_unique_prop
+                 and other_unique_prop - host_unique_prop > stats_model.min_proportion_difference()
+                 and host_prob < other_prob
+                 and other_prob - host_prob > stats_model.min_prob_difference()
+                 and std::max(other_prob * confidence_score_, static_cast<double>(confidence_score_)) >=
+                     stats_model.confidence_probability_threshold())
             call_ = other_index;
     }
 
@@ -305,7 +291,8 @@ public:
     }
 
     void print_result(const InputSummary &summary) {
-        std::cout << read_id_ << "\t" << num_hashes_ << "\t" << summary.category_name(call_) << "\t" << +confidence_score_ << "\t" ;
+        std::cout << read_id_ << "\t" << num_hashes_ << "\t" << summary.category_name(call_) << "\t"
+                  << +confidence_score_ << "\t";
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_.at(i) << ":" << probabilities_.at(i) << "\t";
         }
@@ -339,7 +326,8 @@ public:
         else
             std::cout << "C" << "\t";
         std::cout.precision(6);
-        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t" << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
+        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t"
+                  << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
         for (auto i = 0; i < summary.num_categories(); i++) {
             std::cout << summary.categories.at(i) << ":" << counts_.at(i) << ":" << proportions_.at(i)
                       << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";
