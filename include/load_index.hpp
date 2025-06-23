@@ -6,6 +6,6 @@
 #include <filesystem>
 #include <index.hpp>
 
-void load_index(Index & index, std::filesystem::path const & path);
+void load_index(Index &index, std::filesystem::path const &path);
 
 #endif // CHARON_LOAD_INDEX_MAIN_H

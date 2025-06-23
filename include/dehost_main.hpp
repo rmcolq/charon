@@ -13,13 +13,14 @@
 #include "result.hpp"
 
 class Index;
+
 struct DehostArguments;
 
-void setup_dehost_subcommand(CLI::App& app);
+void setup_dehost_subcommand(CLI::App &app);
 
-void dehost_reads(const DehostArguments& opt, const Index& index);
+void dehost_reads(const DehostArguments &opt, const Index &index);
 
-int dehost_main(DehostArguments & opt);
+int dehost_main(DehostArguments &opt);
 
 
 #endif // CHARON_DEHOST_MAIN_H
