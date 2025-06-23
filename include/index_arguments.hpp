@@ -13,22 +13,21 @@ struct IndexArguments {
     std::string tmp_dir;
 
     // kmer/sketching
-    uint8_t window_size { 41 };
-    uint8_t kmer_size { 19 };
+    uint8_t window_size{41};
+    uint8_t kmer_size{19};
 
     // IBF options
-    mutable size_t bits {std::numeric_limits<uint32_t>::max()-2}; // Allow to change bits for each partition
-    uint8_t num_hash {3};
-    double max_fpr {0.01};
+    mutable size_t bits{std::numeric_limits<uint32_t>::max() - 2}; // Allow to change bits for each partition
+    uint8_t num_hash{3};
+    double max_fpr{0.01};
 
     // General options
-    std::string log_file {"charon.log"};
-    uint8_t threads { 1 };
-    uint8_t verbosity { 0 };
-    bool optimize { false };
+    std::string log_file{"charon.log"};
+    uint8_t threads{1};
+    uint8_t verbosity{0};
+    bool optimize{false};
 
-    std::string to_string()
-    {
+    std::string to_string() {
         std::string ss;
 
         ss += "\n\nIndex Arguments:\n\n";

@@ -5,8 +5,7 @@
 
 #include <load_index.hpp>
 
-void load_index(Index & index, std::filesystem::path const & path)
-{
+void load_index(Index &index, std::filesystem::path const &path) {
     PLOG_INFO << "Loading index from file " << path;
     std::ifstream is{path, std::ios::binary};
     cereal::BinaryInputArchive iarchive{is};

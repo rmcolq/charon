@@ -217,7 +217,7 @@ struct KDEParams {
         std::sort(dataset.begin(), dataset.end());
     }
 
-    float quantile(const float& alpha) const {
+    float quantile(const float &alpha) const {
         int idx = std::ceil((1. - alpha) * dataset.size());
         return dataset[idx];
     }
@@ -227,7 +227,7 @@ struct KDEParams {
         const auto mu = mean(dataset);
         const auto var = variance(dataset, mu);
         const auto std = sqrt(var);
-        const auto A = std::min(iqr/1.34, std);
+        const auto A = std::min(iqr / 1.34, std);
         h = 0.9 * A * pow(dataset.size(), -0.2);
     }
 
@@ -239,16 +239,16 @@ struct KDEParams {
         PLOG_INFO << "Fitting KDE to data with factor " << h;
     }
 
-    float K(const float & x) const {
-        return std::exp(-std::pow(x,2)/2)/sqrt(2*3.141592653589793238463);
+    float K(const float &x) const {
+        return std::exp(-std::pow(x, 2) / 2) / sqrt(2 * 3.141592653589793238463);
     }
 
-    float prob(const float & x) const {
+    float prob(const float &x) const {
         float total_sum = 0;
-        for (const auto &xi : dataset){
+        for (const auto &xi: dataset) {
             total_sum += K((x - xi) / h);
         }
-        return total_sum/(h*dataset.size());
+        return total_sum / (h * dataset.size());
     }
 
 };
@@ -267,8 +267,8 @@ private:
     GammaParams g_neg{10, 0, 0.005};
     BetaParams b_pos{6, 4};
     BetaParams b_neg{6, 40};
-    KDEParams k_pos{default_pos_data,0.1};
-    KDEParams k_neg{default_neg_data,0.001};
+    KDEParams k_pos{default_pos_data, 0.1};
+    KDEParams k_neg{default_neg_data, 0.001};
 public:
     Model() = default;
 
@@ -308,7 +308,8 @@ public:
             g_neg.fit_loc(training_data.neg);
             //auto ad = g_neg.calculate_anderson_darling(training_data.neg);
             PLOG_INFO << "Model " << +id << " using default for g_neg data with Gamma (shape:" << g_neg.shape
-                      << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale << ")";//. Anderson-darling statistic is " << ad;
+                      << ", loc: " << g_neg.loc << ", scale: " << g_neg.scale
+                      << ")";//. Anderson-darling statistic is " << ad;
         }
     }
 
@@ -447,7 +448,7 @@ public:
             confidence_probability_threshold_(opt.confidence_probability_threshold),
             host_unique_prop_lo_threshold_(opt.host_unique_prop_lo_threshold),
             min_proportion_difference_(opt.min_proportion_difference),
-            min_prob_difference_(opt.min_prob_difference){
+            min_prob_difference_(opt.min_prob_difference) {
         for (auto i = 0; i < summary.num_categories(); ++i) {
             models_.emplace_back(Model(i, opt.dist));
             training_data_.emplace_back(TrainingData(opt, i));
