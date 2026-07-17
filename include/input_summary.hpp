@@ -1,6 +1,3 @@
-#ifndef INPUT_SUMMARY_H
-#define INPUT_SUMMARY_H
-
 #pragma once
 
 #include <unordered_map>
@@ -19,78 +16,66 @@ struct InputSummary {
     std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
     std::unordered_map<uint8_t, std::string> bin_to_category;
 
-public:
     InputSummary() = default;
-
-    InputSummary(InputSummary const &) = default;
-
-    InputSummary(InputSummary &&) = default;
-
-    InputSummary &operator=(InputSummary const &) = default;
-
-    InputSummary &operator=(InputSummary &&) = default;
-
+    InputSummary(InputSummary const&) = default;
+    InputSummary(InputSummary&&) = default;
+    InputSummary& operator=(InputSummary const&) = default;
+    InputSummary& operator=(InputSummary&&) = default;
     ~InputSummary() = default;
 
     uint8_t num_categories() const {
-        return categories.size();
+        return static_cast<uint8_t>(categories.size());
     }
 
-    uint8_t category_index(const std::string category) const {
-        for (auto i = 0; i < categories.size(); ++i) {
+    uint8_t category_index(const std::string& category) const {
+        for (size_t i = 0; i < categories.size(); ++i) {
             if (category == categories.at(i))
-                return i;
+                return static_cast<uint8_t>(i);
         }
         return std::numeric_limits<uint8_t>::max();
     }
 
     uint8_t host_category_index() const {
-        auto index1 = category_index("human");
-        auto index2 = category_index("host");
-        auto index = std::min(index1, index2);
+        const auto index1 = category_index("human");
+        const auto index2 = category_index("host");
+        const auto index = std::min(index1, index2);
         if (index == std::numeric_limits<uint8_t>::max())
             PLOG_ERROR << "Neither 'human' nor 'host' appear as categories in the index";
         assert(index != std::numeric_limits<uint8_t>::max());
         return index;
     }
 
+    // Fixed: was `index > categories.size()` which allowed index == size() through,
+    // causing an out-of-bounds access in categories.at(index).
     std::string category_name(const uint8_t index) const {
-        if (index > categories.size())
+        if (index >= categories.size())
             return "";
-        else
-            return categories.at(index);
+        return categories.at(index);
     }
 
     template<seqan3::cereal_archive archive_t>
-    void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t &archive) {
+    void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t& archive) {
         try {
             archive(num_bins);
             archive(categories);
             archive(filepath_to_bin);
             archive(bin_to_category);
-        }
-            // GCOVR_EXCL_START
-        catch (std::exception const &e) {
+        } catch (std::exception const& e) {
             PLOG_ERROR << "Cannot read input_summary: " + std::string{e.what()};
             exit(1);
         }
-
     }
 
     template<seqan3::cereal_input_archive archive_t>
-    void load_parameters(archive_t &archive) {
+    void load_parameters(archive_t& archive) {
         try {
             archive(num_bins);
             archive(categories);
             archive(filepath_to_bin);
             archive(bin_to_category);
-        }
-            // GCOVR_EXCL_START
-        catch (std::exception const &e) {
+        } catch (std::exception const& e) {
             PLOG_ERROR << "Cannot read input_summary: " + std::string{e.what()};
             exit(1);
         }
     }
 };
-
-#endif // INPUT_SUMMARY_H

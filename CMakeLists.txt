@@ -127,3 +127,19 @@ target_link_libraries(test_utils
 )
 
 add_test(NAME test_utils COMMAND test_utils)
+
+add_executable(test_input_summary
+    test/test_input_summary.cpp
+)
+target_include_directories(test_input_summary
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+)
+target_link_libraries(test_input_summary
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_input_summary COMMAND test_input_summary)
