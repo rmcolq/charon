@@ -4,22 +4,31 @@
 #include <plog/Log.h>
 #include <gzip/compress.hpp>
 
-
 std::filesystem::path make_absolute(const std::filesystem::path& path) {
     return std::filesystem::absolute(path);
 }
 
-std::vector<std::string> split(const std::string& s, const std::string& delimiter) {
+std::optional<std::vector<std::string>> split(const std::string& s, const std::string& delimiter) {
+    if (s.find(delimiter) == std::string::npos) {
+        return std::nullopt;
+    }
     std::vector<std::string> substrings;
-
-    int start, end = -1 * static_cast<int>(delimiter.size());
-    do {
-        start = end + static_cast<int>(delimiter.size());
-        end = static_cast<int>(s.find(delimiter, start));
+    size_t start = 0;
+    size_t end;
+    while ((end = s.find(delimiter, start)) != std::string::npos) {
         substrings.push_back(s.substr(start, end - start));
-    } while (end != -1);
-
+        start = end + delimiter.size();
+    }
+    substrings.push_back(s.substr(start));
     return substrings;
+}
+
+std::string first_field(const std::string& s, const std::string& delimiter) {
+    const size_t pos = s.find(delimiter);
+    if (pos == std::string::npos) {
+        return s;
+    }
+    return s.substr(0, pos);
 }
 
 bool ends_with(const std::string& str, const std::string& suffix) {
@@ -33,13 +42,9 @@ bool starts_with(const std::string& str, const std::string& prefix) {
 }
 
 // TODO: consider accepting std::filesystem::path directly to improve testability
-// (callers would build their own paths; this function would not construct them internally)
 void store_hashes(const std::string& target,
                   const std::unordered_set<uint64_t>& hashes,
                   const std::string& tmp_output_folder) {
-    /*
-     * Store hashes from set to disk in the specified folder (or current folder ".").
-     */
     std::filesystem::path outf{tmp_output_folder};
     outf += "/" + target + ".min";
     std::ofstream outfile{outf, std::ios::binary | std::ios::app};
@@ -53,9 +58,6 @@ void store_hashes(const std::string& target,
 // would make this easier to unit test without touching the real filesystem
 std::vector<uint64_t> load_hashes(const std::string& target,
                                   const std::string& tmp_output_folder) {
-    /*
-     * Load hashes file from disk and return them in a vector.
-     */
     uint64_t hash;
     std::vector<uint64_t> hashes;
     std::filesystem::path file{tmp_output_folder};
@@ -68,9 +70,6 @@ std::vector<uint64_t> load_hashes(const std::string& target,
 }
 
 void delete_hashes(const std::vector<uint8_t>& targets, const std::string& tmp_output_folder) {
-    /*
-     * Delete hashes from disk.
-     */
     for (const auto& target : targets) {
         std::filesystem::path outf{tmp_output_folder};
         outf += "/" + std::to_string(target) + ".min";
@@ -83,9 +82,7 @@ void delete_hashes(const std::vector<uint8_t>& targets, const std::string& tmp_o
     }
 }
 
-// TODO: IndexArguments couples this function to the index subsystem.
-// Consider passing num_hash, max_fpr, and bits as plain scalars to make
-// this independently testable without constructing an IndexArguments object.
+// TODO: consider passing num_hash, max_fpr, and bits as plain scalars for testability
 size_t bin_size_in_bits(const IndexArguments& opt, const uint64_t num_elements) {
     assert(opt.num_hash > 0);
     assert(opt.max_fpr > 0.0);
@@ -116,8 +113,6 @@ size_t max_num_hashes_for_fpr(const IndexArguments& opt) {
     return static_cast<size_t>(result);
 }
 
-// Fixed: replaced compiler-internal __type_pack_element with the explicit type it resolves to.
-// __type_pack_element<0, std::vector<seqan3::dna5>, ...> == std::vector<seqan3::dna5>
 std::string sequence_to_string(const std::vector<seqan3::dna5>& input) {
     std::string str;
     str.reserve(input.size());

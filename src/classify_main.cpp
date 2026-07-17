@@ -149,7 +149,7 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
         for (auto i = 0; i < records.size(); ++i) {
 
             const record_type &record = records[i];
-            const auto read_id = split(record.id(), " ")[0];
+            const auto read_id = first_field(record.id(), " ");
             const auto read_length = record.sequence().size();
             if (read_length > std::numeric_limits<uint32_t>::max()) {
                 PLOG_WARNING << "Ignoring read " << record.id() << " as too long!";
@@ -235,7 +235,7 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index) {
                 std::cout << id1 << " " << id2;
                 throw std::runtime_error("Your pairs don't match for read ids.");
             }
-            const auto read_id = split(record1.id(), " ")[0];
+            const auto read_id = first_field(record1.id(), " ");
             const auto read_length = record1.sequence().size() + record2.sequence().size();
             if (read_length > std::numeric_limits<uint32_t>::max()) {
                 PLOG_WARNING << "Ignoring read " << record1.id() << " as too long!";

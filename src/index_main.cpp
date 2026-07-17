@@ -89,9 +89,9 @@ InputSummary parse_input_file(const std::filesystem::path &input_file) {
     while (std::getline(input_ifstream, line)) {
         if (!line.empty()) {
             auto parts = split(line, "\t");
-            if (parts.size() >= 2) {
-                auto path = make_absolute(parts[0]).string();
-                auto name = parts[1];
+            if (parts.has_value() && parts->size() >= 2) {
+            auto path = make_absolute(parts->at(0)).string();
+            auto name = parts->at(1);
                 summary.bin_to_category[next_bin] = name;
                 categories.insert(name);
                 summary.filepath_to_bin.emplace_back(std::make_pair(path, next_bin));

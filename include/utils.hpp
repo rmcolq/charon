@@ -1,6 +1,7 @@
 #pragma once
 
 #include <filesystem>
+#include <optional>
 #include <vector>
 #include <string>
 #include <fstream>
@@ -18,7 +19,12 @@ struct MyTraits : seqan3::sequence_file_input_default_traits_dna {
 // Used to transform paths to absolute paths — designed for use with CLI11 transform
 std::filesystem::path make_absolute(const std::filesystem::path& path);
 
-std::vector<std::string> split(const std::string& s, const std::string& delimiter);
+// Split s by delimiter. Returns nullopt if delimiter is not found.
+std::optional<std::vector<std::string>> split(const std::string& s, const std::string& delimiter);
+
+// Return the substring before the first occurrence of delimiter,
+// or the whole string if delimiter is not found.
+std::string first_field(const std::string& s, const std::string& delimiter);
 
 bool ends_with(const std::string& str, const std::string& suffix);
 
