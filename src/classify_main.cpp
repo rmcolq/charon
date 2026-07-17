@@ -128,7 +128,7 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
     auto agent = index.agent();
     PLOG_VERBOSE << "Defined agent";
 
-    seqan3::sequence_file_input<my_traits> fin{opt.read_file};
+    seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
 
@@ -198,8 +198,8 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index) {
     auto agent = index.agent();
     PLOG_VERBOSE << "Defined agent";
 
-    seqan3::sequence_file_input<my_traits> fin1{opt.read_file};
-    seqan3::sequence_file_input<my_traits> fin2{opt.read_file2};
+    seqan3::sequence_file_input<MyTraits> fin1{opt.read_file};
+    seqan3::sequence_file_input<MyTraits> fin2{opt.read_file2};
     using record_type = decltype(fin1)::record_type;
     std::vector<record_type> records1{};
     std::vector<record_type> records2{};
