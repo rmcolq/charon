@@ -6,6 +6,7 @@
 
 #include <cereal/types/string.hpp>
 #include <cereal/types/unordered_map.hpp>
+#include <seqan3/core/concept/cereal.hpp>  
 #include <plog/Log.h>
 
 struct InputStats {

@@ -157,6 +157,32 @@ target_link_libraries(test_input_stats
     PRIVATE
         seqan3::seqan3
         plog::plog
+        OpenMP::OpenMP_CXX
         Catch2::Catch2WithMain
 )
 add_test(NAME test_input_stats COMMAND test_input_stats)
+
+# Test Index
+add_executable(test_index
+    test/test_index.cpp
+)
+target_include_directories(test_index
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+        ${bzip2_SOURCE_DIR}
+        ${zlib_SOURCE_DIR}
+        ${gzip_SOURCE_DIR}/include
+)
+target_compile_definitions(test_index PRIVATE ZLIB_CONST)
+target_link_libraries(test_index
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_index COMMAND test_index)
