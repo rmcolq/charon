@@ -269,3 +269,43 @@ target_link_libraries(test_input_stats_extended
         Catch2::Catch2WithMain
 )
 add_test(NAME test_input_stats_extended COMMAND test_input_stats_extended)
+
+# Test ReadEntry (Tier 2 - classification logic)
+add_executable(test_read_entry
+    test/test_read_entry.cpp
+)
+target_include_directories(test_read_entry
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+)
+target_link_libraries(test_read_entry
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_read_entry COMMAND test_read_entry)
+
+# Test Result (Tier 2 - template class with I/O)
+add_executable(test_result
+    test/test_result.cpp
+)
+target_include_directories(test_result
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+)
+target_link_libraries(test_result
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_result COMMAND test_result)
