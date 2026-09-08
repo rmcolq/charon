@@ -59,6 +59,15 @@ CPMDeclarePackage(zlib
     DOWNLOAD_ONLY TRUE
 )
 
+# ankerl::unordered_dense - high-performance hash maps
+CPMDeclarePackage(unordered_dense
+    NAME unordered_dense
+    GITHUB_REPOSITORY martinus/unordered_dense
+    VERSION 4.4.0
+    GIT_SHALLOW TRUE
+    DOWNLOAD_ONLY TRUE
+)
+
 # gzip-hpp
 CPMDeclarePackage(gzip
     NAME gzip

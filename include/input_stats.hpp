@@ -11,8 +11,8 @@
 
 struct InputStats {
     uint32_t num_files{0};
-    std::unordered_map<uint8_t, uint64_t> records_per_bin{};
-    std::unordered_map<uint8_t, uint64_t> hashes_per_bin{};
+    ankerl::unordered_dense::map<uint8_t, uint64_t> records_per_bin{};
+    ankerl::unordered_dense::map<uint8_t, uint64_t> hashes_per_bin{};
 
     InputStats() = default;
     InputStats(InputStats const&) = default;

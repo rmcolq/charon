@@ -31,7 +31,7 @@ struct MyTraits : seqan3::sequence_file_input_default_traits_dna {
 [[nodiscard]] bool starts_with(std::string_view str, std::string_view prefix);
 
 void store_hashes(std::string_view target,
-                  const std::unordered_set<uint64_t>& hashes,
+                  const ankerl::unordered_dense::set<uint64_t>& hashes,
                   const std::filesystem::path& tmp_output_folder);
 
 [[nodiscard]] std::vector<uint64_t> load_hashes(std::string_view target,

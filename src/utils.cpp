@@ -3,6 +3,7 @@
 
 #include <plog/Log.h>
 #include <gzip/compress.hpp>
+#include <ankerl/unordered_dense.h>
 
 std::filesystem::path make_absolute(const std::filesystem::path& path) {
     return std::filesystem::absolute(path);
@@ -42,7 +43,7 @@ bool starts_with(std::string_view str, std::string_view prefix) {
 }
 
 void store_hashes(std::string_view target,
-                  const std::unordered_set<uint64_t>& hashes,
+                  const ankerl::unordered_dense::set<uint64_t>& hashes,
                   const std::filesystem::path& tmp_output_folder) {
     const std::filesystem::path outf = tmp_output_folder / (std::string{target} + ".min");
     std::ofstream outfile{outf, std::ios::binary | std::ios::app};

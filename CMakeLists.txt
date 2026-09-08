@@ -48,6 +48,7 @@ CPMGetPackage(bzip2)
 CPMGetPackage(zlib)
 CPMGetPackage(gzip)
 CPMGetPackage(Catch2)
+CPMGetPackage(unordered_dense)
 
 # -----------------------------------------------------------------------------
 # main executable
@@ -79,6 +80,7 @@ target_include_directories(charon
         ${bzip2_SOURCE_DIR}
         ${zlib_SOURCE_DIR}
         ${gzip_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 
 target_compile_definitions(charon PRIVATE ZLIB_CONST)

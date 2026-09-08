@@ -14,7 +14,7 @@ struct InputSummary {
     uint8_t num_bins{0};
     std::vector<std::string> categories;
     std::vector<std::pair<std::string, uint8_t>> filepath_to_bin;
-    std::unordered_map<uint8_t, std::string> bin_to_category;
+    ankerl::unordered_dense::map<uint8_t, std::string> bin_to_category;
 
     InputSummary() = default;
     InputSummary(InputSummary const&) = default;

@@ -3,8 +3,8 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <string>
+#include <ankerl/unordered_dense.h>
 
 #include <cereal/types/string.hpp>
 #include <cereal/types/unordered_map.hpp>
@@ -99,7 +99,7 @@ public:
         return summary_;
     }
 
-    std::unordered_map<uint8_t, std::string> bin_to_category() const {
+    [[nodiscard]] ankerl::unordered_dense::map<uint8_t, std::string> bin_to_category() const {
         return summary_.bin_to_category;
     }
 

@@ -1,9 +1,9 @@
-#include <unordered_map>
 #include <unordered_set>
 #include <iostream>
 #include <fstream>
 #include <string>
 #include <algorithm>
+#include <ankerl/unordered_dense.h>
 
 #include "index_main.hpp"
 #include "utils.hpp"
@@ -76,7 +76,7 @@ InputSummary parse_input_file(const std::filesystem::path &input_file) {
     PLOG_INFO << "Parsing input file " << input_file;
     InputSummary summary;
     uint8_t next_bin = 0;
-    std::unordered_set<std::string> categories;
+    ankerl::unordered_dense::set<std::string> categories;
     categories.reserve(10);  // Reserve space for typical number of categories
 
     std::ifstream input_ifstream{input_file};
@@ -136,7 +136,7 @@ InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary 
             seqan3::sequence_file_input fin{fasta_file};
             
             auto record_count = 0;
-            std::unordered_set<uint64_t> hashes;
+            ankerl::unordered_dense::set<uint64_t> hashes;
             hashes.reserve(10000);  // Pre-allocate to reduce reallocations
             
             for (const auto &record: fin) {
@@ -170,10 +170,10 @@ InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary 
     return stats;
 }
 
-std::unordered_map<uint8_t, std::vector<uint8_t>>
+ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>>
 optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats) {
-    std::unordered_map<uint8_t, uint8_t> bin_to_bucket_map;
-    std::unordered_map<uint8_t, std::vector<uint8_t>> bucket_to_bins_map;
+    ankerl::unordered_dense::map<uint8_t, uint8_t> bin_to_bucket_map;
+    ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> bucket_to_bins_map;
 
     if (stats.hashes_per_bin.size() == 0) {
         return bucket_to_bins_map;
@@ -194,7 +194,7 @@ optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &st
     PLOG_DEBUG << "Max hashes found for bin " << +sorted_pairs.back().first << " : " << max_num_hashes;
 
     uint8_t next_bin = 0;
-    std::unordered_map<std::string, uint8_t> last_bin;
+    ankerl::unordered_dense::map<std::string, uint8_t> last_bin;
 
     // update stats
     PLOG_INFO << "Reassign bins";
@@ -247,7 +247,7 @@ optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &st
 }
 
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
-                  const std::unordered_map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map) {
+                  const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map) {
     const auto max_num_hashes = stats.max_num_hashes();
     const auto num_bits = bin_size_in_bits(opt, max_num_hashes);
     PLOG_INFO << "Create new IBF with " << +summary.num_bins << " bins and " << +num_bits << " bits";

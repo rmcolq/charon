@@ -5,6 +5,7 @@
 
 #include <string>
 #include <algorithm>
+#include <ankerl/unordered_dense.h>
 
 #include <plog/Log.h>
 
@@ -22,7 +23,7 @@ private:
 
     uint32_t num_hashes_{0};
     std::vector<seqan3::interleaved_bloom_filter<seqan3::compressed>::membership_agent_type::binning_bitvector> bits_;// this collects over all bins
-    std::unordered_map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
+    ankerl::unordered_dense::map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
     std::vector<uint32_t> counts_;
     std::vector<uint32_t> unique_counts_;
     std::vector<float> proportions_; // this collects over categories the proportion of all hashes which were from the given category
