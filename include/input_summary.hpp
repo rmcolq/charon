@@ -23,11 +23,11 @@ struct InputSummary {
     InputSummary& operator=(InputSummary&&) = default;
     ~InputSummary() = default;
 
-    uint8_t num_categories() const {
+    [[nodiscard]] uint8_t num_categories() const {
         return static_cast<uint8_t>(categories.size());
     }
 
-    uint8_t category_index(const std::string& category) const {
+    [[nodiscard]] uint8_t category_index(const std::string& category) const {
         for (size_t i = 0; i < categories.size(); ++i) {
             if (category == categories.at(i))
                 return static_cast<uint8_t>(i);
@@ -35,7 +35,7 @@ struct InputSummary {
         return std::numeric_limits<uint8_t>::max();
     }
 
-    uint8_t host_category_index() const {
+    [[nodiscard]] uint8_t host_category_index() const {
         const auto index1 = category_index("human");
         const auto index2 = category_index("host");
         const auto index = std::min(index1, index2);
@@ -47,7 +47,7 @@ struct InputSummary {
 
     // Fixed: was `index > categories.size()` which allowed index == size() through,
     // causing an out-of-bounds access in categories.at(index).
-    std::string category_name(const uint8_t index) const {
+    [[nodiscard]] std::string category_name(const uint8_t index) const {
         if (index >= categories.size())
             return "";
         return categories.at(index);

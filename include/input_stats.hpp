@@ -21,8 +21,9 @@ struct InputStats {
     InputStats& operator=(InputStats&&) = default;
     ~InputStats() = default;
 
-    std::vector<std::pair<uint8_t, uint64_t>> bins_by_size() const {
+    [[nodiscard]] std::vector<std::pair<uint8_t, uint64_t>> bins_by_size() const {
         std::vector<std::pair<uint8_t, uint64_t>> sorted_pairs;
+        sorted_pairs.reserve(hashes_per_bin.size());  // Pre-allocate
         for (const auto& it : hashes_per_bin) {
             sorted_pairs.push_back(it);
         }
@@ -35,10 +36,12 @@ struct InputStats {
 
     // Fixed: was non-const despite not mutating state.
     // Fixed: was undefined behaviour on empty hashes_per_bin — now returns 0.
-    uint64_t max_num_hashes() const {
+    // Optimized: uses std::max_element instead of full sort
+    [[nodiscard]] uint64_t max_num_hashes() const {
         if (hashes_per_bin.empty())
             return 0;
-        return bins_by_size().back().second;
+        return std::max_element(hashes_per_bin.begin(), hashes_per_bin.end(),
+            [](const auto& a, const auto& b) { return a.second < b.second; })->second;
     }
 
     template<seqan3::cereal_archive archive_t>

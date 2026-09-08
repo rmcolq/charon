@@ -49,27 +49,27 @@ public:
             stats_{stats},
             ibf_(ibf) {}
 
-    uint8_t window_size() const {
+    [[nodiscard]] constexpr uint8_t window_size() const {
         return window_size_;
     }
 
-    uint8_t kmer_size() const {
+    [[nodiscard]] constexpr uint8_t kmer_size() const {
         return kmer_size_;
     }
 
-    uint8_t num_bins() const {
+    [[nodiscard]] constexpr uint8_t num_bins() const {
         return summary_.num_bins;
     }
 
-    uint8_t num_categories() const {
+    [[nodiscard]] constexpr uint8_t num_categories() const {
         return summary_.num_categories();
     }
 
-    std::vector<std::string> categories() const {
+    [[nodiscard]] const std::vector<std::string>& categories() const {
         return summary_.categories;
     }
 
-    uint8_t get_host_index() const {
+    [[nodiscard]] uint8_t get_host_index() const {
         const auto index1 = summary_.category_index("host");
         const auto index2 = summary_.category_index("human");
         auto index = std::min(index1, index2);
@@ -79,7 +79,7 @@ public:
         return index;
     }
 
-    uint8_t get_category_index(const std::string category) const {
+    [[nodiscard]] uint8_t get_category_index(const std::string category) const {
         const auto index = summary_.category_index(category);
         if (index == std::numeric_limits<uint8_t>::max())
             PLOG_ERROR << "Index does not contain category ";
@@ -87,15 +87,15 @@ public:
         return index;
     }
 
-    double max_fpr() const {
+    [[nodiscard]] double max_fpr() const {
         return max_fpr_;
     }
 
-    InputStats stats() const {
+    [[nodiscard]] const InputStats& stats() const {
         return stats_;
     }
 
-    InputSummary summary() const {
+    [[nodiscard]] const InputSummary& summary() const {
         return summary_;
     }
 

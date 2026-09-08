@@ -77,6 +77,7 @@ InputSummary parse_input_file(const std::filesystem::path &input_file) {
     InputSummary summary;
     uint8_t next_bin = 0;
     std::unordered_set<std::string> categories;
+    categories.reserve(10);  // Reserve space for typical number of categories
 
     std::ifstream input_ifstream{input_file};
     if (!input_ifstream.is_open()) {
@@ -105,6 +106,7 @@ InputSummary parse_input_file(const std::filesystem::path &input_file) {
     input_ifstream.close();
 
     summary.num_bins = next_bin;
+    summary.categories.reserve(categories.size());  // Pre-allocate
     summary.categories.insert(summary.categories.end(), categories.begin(), categories.end());
 
     PLOG_INFO << "Found " << summary.filepath_to_bin.size() << " files corresponding to " << +summary.num_categories()

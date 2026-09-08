@@ -80,7 +80,7 @@ public:
     bool add_pos(const float &val) {
         if (pos.size() < num_reads_to_fit) {
 #pragma omp critical(pos_push)
-            pos.push_back(val);
+            pos.emplace_back(val);
         } else {
             check_status();
         }
@@ -92,7 +92,7 @@ public:
     bool add_neg(const float &val) {
         if (neg.size() < num_reads_to_fit and val > 0) {
 #pragma omp critical(neg_push)
-            neg.push_back(val);
+            neg.emplace_back(val);
         } else {
             check_status();
         }

@@ -8,35 +8,35 @@ std::filesystem::path make_absolute(const std::filesystem::path& path) {
     return std::filesystem::absolute(path);
 }
 
-std::optional<std::vector<std::string>> split(const std::string& s, const std::string& delimiter) {
-    if (s.find(delimiter) == std::string::npos) {
+std::optional<std::vector<std::string>> split(std::string_view s, std::string_view delimiter) {
+    if (s.find(delimiter) == std::string_view::npos) {
         return std::nullopt;
     }
     std::vector<std::string> substrings;
     size_t start = 0;
     size_t end;
-    while ((end = s.find(delimiter, start)) != std::string::npos) {
-        substrings.push_back(s.substr(start, end - start));
+    while ((end = s.find(delimiter, start)) != std::string_view::npos) {
+        substrings.emplace_back(s.substr(start, end - start));
         start = end + delimiter.size();
     }
-    substrings.push_back(s.substr(start));
+    substrings.emplace_back(s.substr(start));
     return substrings;
 }
 
-std::string first_field(const std::string& s, const std::string& delimiter) {
+std::string first_field(std::string_view s, std::string_view delimiter) {
     const size_t pos = s.find(delimiter);
-    if (pos == std::string::npos) {
-        return s;
+    if (pos == std::string_view::npos) {
+        return std::string{s};
     }
-    return s.substr(0, pos);
+    return std::string{s.substr(0, pos)};
 }
 
-bool ends_with(const std::string& str, const std::string& suffix) {
+bool ends_with(std::string_view str, std::string_view suffix) {
     return str.size() >= suffix.size()
         && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
 }
 
-bool starts_with(const std::string& str, const std::string& prefix) {
+bool starts_with(std::string_view str, std::string_view prefix) {
     return str.size() >= prefix.size()
         && str.compare(0, prefix.size(), prefix) == 0;
 }

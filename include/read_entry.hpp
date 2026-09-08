@@ -66,23 +66,23 @@ public:
     // Explicit destructor to ensure proper cleanup (RAII)
     ~ReadEntry() = default;
 
-    const std::string &read_id() const {
+    [[nodiscard]] const std::string &read_id() const {
         return read_id_;
     }
 
-    const std::vector<float> &proportions() const {
+    [[nodiscard]] const std::vector<float> &proportions() const {
         return proportions_;
     }
 
-    const std::vector<float> &unique_proportions() const {
+    [[nodiscard]] const std::vector<float> &unique_proportions() const {
         return unique_proportions_;
     }
 
-    const uint8_t call() const {
+    [[nodiscard]] const uint8_t call() const {
         return call_;
     }
 
-    const uint8_t confidence_score() const {
+    [[nodiscard]] const uint8_t confidence_score() const {
         return confidence_score_;
     }
 
