@@ -319,3 +319,20 @@ target_link_libraries(test_result
         Catch2::Catch2WithMain
 )
 add_test(NAME test_result COMMAND test_result)
+
+# Test Tier 3 Integration Tests (end-to-end CLI testing)
+add_executable(test_tier3_integration
+    test/test_tier3_integration.cpp
+)
+target_include_directories(test_tier3_integration
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${plog_SOURCE_DIR}/include
+)
+target_link_libraries(test_tier3_integration
+    PRIVATE
+        plog::plog
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_tier3_integration COMMAND test_tier3_integration)
