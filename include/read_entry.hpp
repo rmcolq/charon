@@ -42,8 +42,6 @@ public:
 
     ReadEntry &operator=(ReadEntry &&) = default;
 
-    ~ReadEntry() = default;
-
     ReadEntry(const std::string &read_id, const uint32_t &length, const float &mean_quality, const float &compression,
               const InputSummary &summary) :
             read_id_(read_id),

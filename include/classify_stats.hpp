@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cassert>
+#include <ranges>
 
 #include <stats.hpp>
 

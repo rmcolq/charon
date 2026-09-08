@@ -1,13 +1,13 @@
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 #include <string>
 
+#include <ankerl/unordered_dense.h>
 #include <cereal/types/string.hpp>
-#include <cereal/types/unordered_map.hpp>
 #include <seqan3/core/concept/cereal.hpp>  
 #include <plog/Log.h>
+#include <cereal_unordered_dense.h>
 
 struct InputStats {
     uint32_t num_files{0};

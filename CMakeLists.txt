@@ -116,6 +116,7 @@ target_include_directories(test_utils
         ${bzip2_SOURCE_DIR}
         ${zlib_SOURCE_DIR}
         ${gzip_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 
 target_compile_definitions(test_utils PRIVATE ZLIB_CONST)
@@ -138,6 +139,7 @@ target_include_directories(test_input_summary
     PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/lib/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_link_libraries(test_input_summary
     PRIVATE
@@ -154,6 +156,7 @@ target_include_directories(test_input_stats
     PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/lib/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_link_libraries(test_input_stats
     PRIVATE
@@ -178,6 +181,7 @@ target_include_directories(test_index
         ${bzip2_SOURCE_DIR}
         ${zlib_SOURCE_DIR}
         ${gzip_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_compile_definitions(test_index PRIVATE ZLIB_CONST)
 target_link_libraries(test_index
@@ -199,6 +203,7 @@ target_include_directories(test_classify_stats
         ${PROJECT_SOURCE_DIR}/lib/include
         ${gcem_SOURCE_DIR}/include
         ${statslib_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_link_libraries(test_classify_stats
     PRIVATE
@@ -224,6 +229,7 @@ target_include_directories(test_utils_io
         ${bzip2_SOURCE_DIR}
         ${zlib_SOURCE_DIR}
         ${gzip_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_compile_definitions(test_utils_io PRIVATE ZLIB_CONST)
 target_link_libraries(test_utils_io
@@ -243,6 +249,7 @@ target_include_directories(test_input_summary_extended
     PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/lib/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_link_libraries(test_input_summary_extended
     PRIVATE
@@ -260,6 +267,7 @@ target_include_directories(test_input_stats_extended
     PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/lib/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_link_libraries(test_input_stats_extended
     PRIVATE
@@ -280,6 +288,7 @@ target_include_directories(test_read_entry
         ${PROJECT_SOURCE_DIR}/lib/include
         ${gcem_SOURCE_DIR}/include
         ${statslib_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_link_libraries(test_read_entry
     PRIVATE
@@ -300,6 +309,7 @@ target_include_directories(test_result
         ${PROJECT_SOURCE_DIR}/lib/include
         ${gcem_SOURCE_DIR}/include
         ${statslib_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
 )
 target_link_libraries(test_result
     PRIVATE

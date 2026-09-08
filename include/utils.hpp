@@ -9,6 +9,7 @@
 
 #include <seqan3/io/sequence_file/input.hpp>
 #include <seqan3/alphabet/quality/phred94.hpp>
+#include <ankerl/unordered_dense.h>
 
 class IndexArguments;
 
