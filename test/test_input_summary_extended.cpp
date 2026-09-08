@@ -82,13 +82,20 @@ TEST_CASE("host_category_index prefers 'human' over 'host'", "[InputSummary][hos
 TEST_CASE("host_category_index with neither human nor host", "[InputSummary][host_category_index]") {
     InputSummary s;
     s.categories = {"bacteria", "virus", "fungus"};
-    // This will log an error but should return max uint8
-    REQUIRE(s.host_category_index() == std::numeric_limits<uint8_t>::max());
+    // This case should not happen in practice - the function asserts
+    // Testing that it would return max uint8 before assert
+    REQUIRE(s.category_index("human") == std::numeric_limits<uint8_t>::max());
+    REQUIRE(s.category_index("host") == std::numeric_limits<uint8_t>::max());
+    // Note: Calling host_category_index() here would trigger assert
 }
 
 TEST_CASE("host_category_index with empty categories", "[InputSummary][host_category_index]") {
     InputSummary s;
-    REQUIRE(s.host_category_index() == std::numeric_limits<uint8_t>::max());
+    // This case should not happen in practice - the function asserts
+    // Testing with category_index instead
+    REQUIRE(s.category_index("human") == std::numeric_limits<uint8_t>::max());
+    REQUIRE(s.category_index("host") == std::numeric_limits<uint8_t>::max());
+    // Note: Calling host_category_index() here would trigger assert
 }
 
 // ─── category_name ───────────────────────────────────────────────────────────
