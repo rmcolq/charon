@@ -143,7 +143,7 @@ TEST_CASE("store_hashes and load_hashes roundtrip with large hash set", "[store_
     // Spot check some values
     REQUIRE(std::find(loaded.begin(), loaded.end(), 0) != loaded.end());
     REQUIRE(std::find(loaded.begin(), loaded.end(), 7) != loaded.end());
-    REQUIRE(std::find(loaded.begin(), loaded.end(), 70000) != loaded.end());
+    REQUIRE(std::find(loaded.begin(), loaded.end(), 69993) != loaded.end());  // 9999 * 7
     
     cleanup_temp_test_dir(temp_dir);
 }
@@ -256,7 +256,7 @@ TEST_CASE("bin_size_in_bits increases with more elements", "[bin_size_in_bits]")
     IndexArguments opt;
     opt.num_hash = 3;
     opt.max_fpr = 0.01;
-    opt.bits = 64;
+    opt.bits = 100000;  // Large enough to not cap results
     
     const auto result1 = bin_size_in_bits(opt, 100);
     const auto result2 = bin_size_in_bits(opt, 1000);
@@ -269,7 +269,7 @@ TEST_CASE("bin_size_in_bits increases with more elements", "[bin_size_in_bits]")
 TEST_CASE("bin_size_in_bits decreases with lower FPR", "[bin_size_in_bits]") {
     IndexArguments opt;
     opt.num_hash = 3;
-    opt.bits = 64;
+    opt.bits = 100000;  // Large enough to not cap results
     
     const uint64_t num_elements = 1000;
     const auto result1 = bin_size_in_bits(opt, num_elements);  // max_fpr = 0.01 (default)
