@@ -30,12 +30,12 @@ bool ends_with(const std::string& str, const std::string& suffix);
 
 bool starts_with(const std::string& str, const std::string& prefix);
 
-void store_hashes(const std::string& target,
+void store_hashes(std::string_view target,
                   const std::unordered_set<uint64_t>& hashes,
-                  const std::string& tmp_output_folder);
+                  const std::filesystem::path& tmp_output_folder);
 
-std::vector<uint64_t> load_hashes(const std::string& target,
-                                  const std::string& tmp_output_folder);
+std::vector<uint64_t> load_hashes(std::string_view target,
+                                  const std::filesystem::path& tmp_output_folder);
 
 void delete_hashes(const std::vector<uint8_t>& targets, const std::string& tmp_output_folder);
 

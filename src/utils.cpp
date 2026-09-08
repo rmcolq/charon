@@ -41,28 +41,38 @@ bool starts_with(const std::string& str, const std::string& prefix) {
         && str.compare(0, prefix.size(), prefix) == 0;
 }
 
-// TODO: consider accepting std::filesystem::path directly to improve testability
-void store_hashes(const std::string& target,
+void store_hashes(std::string_view target,
                   const std::unordered_set<uint64_t>& hashes,
-                  const std::string& tmp_output_folder) {
-    std::filesystem::path outf{tmp_output_folder};
-    outf += "/" + target + ".min";
+                  const std::filesystem::path& tmp_output_folder) {
+    const std::filesystem::path outf = tmp_output_folder / (std::string{target} + ".min");
     std::ofstream outfile{outf, std::ios::binary | std::ios::app};
+    if (!outfile.is_open()) {
+        throw std::runtime_error{"Failed to open file for writing: " + outf.string()};
+    }
     for (const auto& h : hashes) {
         outfile.write(reinterpret_cast<const char*>(&h), sizeof(h));
     }
-    outfile.close();
+    // outfile automatically closed by RAII
 }
 
-// TODO: same as store_hashes — accepting a pre-built std::filesystem::path
-// would make this easier to unit test without touching the real filesystem
-std::vector<uint64_t> load_hashes(const std::string& target,
-                                  const std::string& tmp_output_folder) {
-    uint64_t hash;
-    std::vector<uint64_t> hashes;
-    std::filesystem::path file{tmp_output_folder};
-    file += "/" + target + ".min";
+std::vector<uint64_t> load_hashes(std::string_view target,
+                                  const std::filesystem::path& tmp_output_folder) {
+    const std::filesystem::path file = tmp_output_folder / (std::string{target} + ".min");
     std::ifstream infile{file, std::ios::binary};
+    if (!infile.is_open()) {
+        throw std::runtime_error{"Failed to open file for reading: " + file.string()};
+    }
+    
+    // Get file size to reserve space
+    infile.seekg(0, std::ios::end);
+    const auto file_size = infile.tellg();
+    infile.seekg(0, std::ios::beg);
+    
+    std::vector<uint64_t> hashes;
+    const size_t expected_count = file_size / sizeof(uint64_t);
+    hashes.reserve(expected_count);  // Prevent reallocations
+    
+    uint64_t hash;
     while (infile.read(reinterpret_cast<char*>(&hash), sizeof(hash))) {
         hashes.push_back(hash);
     }

@@ -131,6 +131,7 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
+    records.reserve(opt.chunk_size);  // Prevent reallocations in loop
 
     using outfile_field_ids = decltype(fin)::field_ids;
     using outfile_format = decltype(fin)::valid_formats;
@@ -141,47 +142,51 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
 
     for (auto &&chunk: fin | seqan3::views::chunk(opt.chunk_size)) {
         // You can use a for loop:
+        records.clear();  // Keeps capacity, prevents reallocation
         for (auto &record: chunk) {
             records.push_back(std::move(record));
         }
 
 #pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
         for (auto i = 0; i < records.size(); ++i) {
+            try {
+                const record_type &record = records[i];
+                const auto read_id = first_field(record.id(), " ");
+                const auto read_length = record.sequence().size();
+                if (read_length > std::numeric_limits<uint32_t>::max()) {
+                    PLOG_WARNING << "Ignoring read " << record.id() << " as too long!";
+                    continue;
+                }
+                if (read_length == 0) {
+                    PLOG_WARNING << "Ignoring read " << record.id() << " as has zero length!";
+                    continue;
+                }
+                auto qualities = record.base_qualities() |
+                                 std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
+                auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
+                float mean_quality = 0;
+                if (std::ranges::size(qualities) > 0)
+                    mean_quality = static_cast< float >( sum ) / static_cast< float >(std::ranges::size(qualities));
+                PLOG_VERBOSE << "Mean quality of read  " << record.id() << " is " << mean_quality;
 
-            const record_type &record = records[i];
-            const auto read_id = first_field(record.id(), " ");
-            const auto read_length = record.sequence().size();
-            if (read_length > std::numeric_limits<uint32_t>::max()) {
-                PLOG_WARNING << "Ignoring read " << record.id() << " as too long!";
-                continue;
-            }
-            if (read_length == 0) {
-                PLOG_WARNING << "Ignoring read " << record.id() << " as has zero length!";
-                continue;
-            }
-            auto qualities = record.base_qualities() |
-                             std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
-            auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
-            float mean_quality = 0;
-            if (std::ranges::size(qualities) > 0)
-                mean_quality = static_cast< float >( sum ) / static_cast< float >(std::ranges::size(qualities));
-            PLOG_VERBOSE << "Mean quality of read  " << record.id() << " is " << mean_quality;
+                float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
+                PLOG_VERBOSE << "Found compression ratio of read  " << record.id() << " is " << compression_ratio;
 
-            float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
-            PLOG_VERBOSE << "Found compression ratio of read  " << record.id() << " is " << compression_ratio;
+                auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
+                for (auto &&value: record.sequence() | hash_adaptor) {
+                    const auto &entry = agent.bulk_contains(value);
+                    read.update_entry(entry);
+                }
+                PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
 
-            auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
-            for (auto &&value: record.sequence() | hash_adaptor) {
-                const auto &entry = agent.bulk_contains(value);
-                read.update_entry(entry);
-            }
-            PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
-
-            read.post_process(result.input_summary());
+                read.post_process(result.input_summary());
 #pragma omp critical(add_read_to_results)
-            result.add_read(read, record);
+                result.add_read(read, record);
+            } catch (const std::exception& e) {
+                PLOG_ERROR << "Error processing read " << records[i].id() << ": " << e.what();
+                // Continue processing other reads
+            }
         }
-        records.clear();
     }
     result.complete();
     result.print_summary();
@@ -203,6 +208,8 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index) {
     using record_type = decltype(fin1)::record_type;
     std::vector<record_type> records1{};
     std::vector<record_type> records2{};
+    records1.reserve(opt.chunk_size);  // Prevent reallocations
+    records2.reserve(opt.chunk_size);  // Prevent reallocations
 
     using outfile_field_ids = decltype(fin1)::field_ids;
     using outfile_format = decltype(fin1)::valid_formats;
@@ -212,6 +219,8 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index) {
     PLOG_DEBUG << "Defined Result with " << +index.num_bins() << " bins";
 
     for (auto &&chunk: fin1 | seqan3::views::chunk(opt.chunk_size)) {
+        records1.clear();  // Keeps capacity
+        records2.clear();  // Keeps capacity
         for (auto &record: chunk) {
             records1.push_back(std::move(record));
         }
@@ -223,61 +232,63 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index) {
 
 #pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
         for (auto i = 0; i < records1.size(); ++i) {
+            try {
+                const auto &record1 = records1[i];
+                const auto &record2 = records2[i];
 
-            const auto &record1 = records1[i];
-            const auto &record2 = records2[i];
+                auto id1 = record1.id();
+                id1.erase(id1.size() - 1);
+                auto id2 = record2.id();
+                id2.erase(id2.size() - 1);
+                if (id1 != id2) {
+                    std::cout << id1 << " " << id2;
+                    throw std::runtime_error("Your pairs don't match for read ids.");
+                }
+                const auto read_id = first_field(record1.id(), " ");
+                const auto read_length = record1.sequence().size() + record2.sequence().size();
+                if (read_length > std::numeric_limits<uint32_t>::max()) {
+                    PLOG_WARNING << "Ignoring read " << record1.id() << " as too long!";
+                    continue;
+                }
+                if (read_length == 0) {
+                    PLOG_WARNING << "Ignoring read " << record1.id() << " as has zero length!";
+                    continue;
+                }
+                auto qualities1 = record1.base_qualities() |
+                                  std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
+                auto qualities2 = record2.base_qualities() |
+                                  std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
+                auto sum = std::accumulate(qualities1.begin(), qualities1.end(), 0);
+                sum = std::accumulate(qualities2.begin(), qualities2.end(), sum);
+                float mean_quality = 0;
+                if (std::ranges::size(qualities1) + std::ranges::size(qualities2) > 0)
+                    mean_quality = static_cast< float >( sum ) /
+                                   static_cast< float >(std::ranges::size(qualities1) + std::ranges::size(qualities2));
+                PLOG_VERBOSE << "Mean quality of read  " << record1.id() << " is " << mean_quality;
 
-            auto id1 = record1.id();
-            id1.erase(id1.size() - 1);
-            auto id2 = record2.id();
-            id2.erase(id2.size() - 1);
-            if (id1 != id2) {
-                std::cout << id1 << " " << id2;
-                throw std::runtime_error("Your pairs don't match for read ids.");
-            }
-            const auto read_id = first_field(record1.id(), " ");
-            const auto read_length = record1.sequence().size() + record2.sequence().size();
-            if (read_length > std::numeric_limits<uint32_t>::max()) {
-                PLOG_WARNING << "Ignoring read " << record1.id() << " as too long!";
-                continue;
-            }
-            if (read_length == 0) {
-                PLOG_WARNING << "Ignoring read " << record1.id() << " as has zero length!";
-                continue;
-            }
-            auto qualities1 = record1.base_qualities() |
-                              std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
-            auto qualities2 = record2.base_qualities() |
-                              std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
-            auto sum = std::accumulate(qualities1.begin(), qualities1.end(), 0);
-            sum = std::accumulate(qualities2.begin(), qualities2.end(), sum);
-            float mean_quality = 0;
-            if (std::ranges::size(qualities1) + std::ranges::size(qualities2) > 0)
-                mean_quality = static_cast< float >( sum ) /
-                               static_cast< float >(std::ranges::size(qualities1) + std::ranges::size(qualities2));
-            PLOG_VERBOSE << "Mean quality of read  " << record1.id() << " is " << mean_quality;
+                auto combined_record = sequence_to_string(record1.sequence()) + sequence_to_string(record2.sequence());
+                float compression_ratio = get_compression_ratio(combined_record);
+                PLOG_VERBOSE << "Found compression ratio of read  " << record1.id() << " is " << compression_ratio;
 
-            auto combined_record = sequence_to_string(record1.sequence()) + sequence_to_string(record2.sequence());
-            float compression_ratio = get_compression_ratio(combined_record);
-            PLOG_VERBOSE << "Found compression ratio of read  " << record1.id() << " is " << compression_ratio;
+                auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
+                for (auto &&value: record1.sequence() | hash_adaptor) {
+                    const auto &entry = agent.bulk_contains(value);
+                    read.update_entry(entry);
+                }
+                for (auto &&value: record2.sequence() | hash_adaptor) {
+                    const auto &entry = agent.bulk_contains(value);
+                    read.update_entry(entry);
+                }
+                PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
 
-            auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
-            for (auto &&value: record1.sequence() | hash_adaptor) {
-                const auto &entry = agent.bulk_contains(value);
-                read.update_entry(entry);
-            }
-            for (auto &&value: record2.sequence() | hash_adaptor) {
-                const auto &entry = agent.bulk_contains(value);
-                read.update_entry(entry);
-            }
-            PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
-
-            read.post_process(result.input_summary());
+                read.post_process(result.input_summary());
 #pragma omp critical(add_read_to_results)
-            result.add_paired_read(read, record1, record2);
+                result.add_paired_read(read, record1, record2);
+            } catch (const std::exception& e) {
+                PLOG_ERROR << "Error processing paired read " << records1[i].id() << ": " << e.what();
+                // Continue processing other reads
+            }
         }
-        records1.clear();
-        records2.clear();
     }
     result.complete();
     result.print_summary();

@@ -63,6 +63,9 @@ public:
         PLOG_VERBOSE << "Initializing complete for read_id " << read_id;
     }
 
+    // Explicit destructor to ensure proper cleanup (RAII)
+    ~ReadEntry() = default;
+
     const std::string &read_id() const {
         return read_id_;
     }

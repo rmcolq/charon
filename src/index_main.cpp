@@ -78,11 +78,9 @@ InputSummary parse_input_file(const std::filesystem::path &input_file) {
     uint8_t next_bin = 0;
     std::unordered_set<std::string> categories;
 
-    std::ifstream input_ifstream;
-    input_ifstream.open(input_file);
+    std::ifstream input_ifstream{input_file};
     if (!input_ifstream.is_open()) {
-        PLOG_ERROR << "Error opening file " << input_file;
-        exit(1);
+        throw std::runtime_error{"Failed to open input file: " + input_file.string()};
     }
 
     std::string line;
@@ -128,31 +126,42 @@ InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary 
 
 #pragma omp parallel for num_threads(opt.threads)
     for (const auto pair: summary.filepath_to_bin) {
-        const auto &fasta_file = pair.first;
-        const auto &bin = pair.second;
-        stats.records_per_bin[bin] += 0;
-
-        PLOG_DEBUG << "Adding file " << fasta_file;
-        seqan3::sequence_file_input fin{fasta_file};
+        try {
+            const auto &fasta_file = pair.first;
+            const auto &bin = pair.second;
+            
+            PLOG_DEBUG << "Adding file " << fasta_file;
+            seqan3::sequence_file_input fin{fasta_file};
+            
+            auto record_count = 0;
+            std::unordered_set<uint64_t> hashes;
+            hashes.reserve(10000);  // Pre-allocate to reduce reallocations
+            
+            for (const auto &record: fin) {
+                const auto mh = record.sequence() | hash_adaptor | std::views::common;
+                hashes.insert(mh.begin(), mh.end());
+                record_count++;
+            }
+            
+            // Thread-safe updates to shared stats
 #pragma omp critical
-        stats.num_files += 1;
+            {
+                stats.records_per_bin[bin] += record_count;
+                stats.num_files += 1;
+                store_hashes(std::to_string(bin), hashes, opt.tmp_dir);
+                stats.hashes_per_bin[bin] += hashes.size();
+                PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size()
+                          << " hashes to bin " << +bin;
 
-        auto record_count = 0;
-        std::unordered_set<uint64_t> hashes;
-        for (const auto &record: fin) {
-            stats.records_per_bin[bin] += 1;
-            const auto mh = record.sequence() | hash_adaptor | std::views::common;
-            hashes.insert(mh.begin(), mh.end());
-            record_count++;
-        }
-        store_hashes(std::to_string(bin), hashes, opt.tmp_dir);
-        stats.hashes_per_bin[bin] += hashes.size();
-        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size()
-                  << " hashes to bin " << +bin;
-
-        if (stats.hashes_per_bin[bin] > max_num_hashes) {
-            PLOG_WARNING
-                        << "File " << fasta_file << " with " << hashes.size() << " will exceed max_fpr " << opt.max_fpr;
+                if (stats.hashes_per_bin[bin] > max_num_hashes) {
+                    PLOG_WARNING
+                                << "File " << fasta_file << " with " << hashes.size() << " will exceed max_fpr " << opt.max_fpr;
+                }
+            }
+        } catch (const std::exception& e) {
+            PLOG_ERROR << "Error processing file " << pair.first << ": " << e.what();
+            // Re-throw to fail the build process
+            throw;
         }
     }
 
@@ -246,16 +255,23 @@ Index build_index(const IndexArguments &opt, const InputSummary &summary, InputS
 
 #pragma omp parallel for
     for (uint8_t bucket = 0; bucket < summary.num_bins; ++bucket) {
-        const auto &bins = bucket_to_bins_map.at(bucket);
-        for (auto const &bin: bins) {
-            const auto &hashes = load_hashes(std::to_string(bin), opt.tmp_dir);
+        try {
+            const auto &bins = bucket_to_bins_map.at(bucket);
+            for (auto const &bin: bins) {
+                const auto &hashes = load_hashes(std::to_string(bin), opt.tmp_dir);
 #pragma omp critical
-            for (auto &&value: hashes) {
-                ibf.emplace(value, seqan3::bin_index{bucket});
+                {
+                    for (auto &&value: hashes) {
+                        ibf.emplace(value, seqan3::bin_index{bucket});
+                    }
+                }
+                PLOG_DEBUG << "Added " << hashes.size() << " hashes to bin " << +bucket;
             }
-            PLOG_DEBUG << "Added " << hashes.size() << " hashes to bin " << +bucket;
+            delete_hashes(bins, opt.tmp_dir);
+        } catch (const std::exception& e) {
+            PLOG_ERROR << "Error building bucket " << +bucket << ": " << e.what();
+            throw;  // Re-throw to ensure proper cleanup
         }
-        delete_hashes(bins, opt.tmp_dir);
     }
 
 
