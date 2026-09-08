@@ -320,19 +320,39 @@ target_link_libraries(test_result
 )
 add_test(NAME test_result COMMAND test_result)
 
-# Test Tier 3 Integration Tests (end-to-end CLI testing)
-add_executable(test_tier3_integration
-    test/test_tier3_integration.cpp
+# Test load_index (critical I/O function)
+add_executable(test_load_index
+    test/test_load_index.cpp
+    src/load_index.cpp
 )
-target_include_directories(test_tier3_integration
+target_include_directories(test_load_index
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${unordered_dense_SOURCE_DIR}/include
+)
+target_link_libraries(test_load_index
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_load_index COMMAND test_load_index)
+
+# Test Integration Tests (end-to-end CLI testing)
+add_executable(test_integration
+    test/test_integration.cpp
+)
+target_include_directories(test_integration
     PRIVATE
         ${PROJECT_SOURCE_DIR}/include
         ${PROJECT_SOURCE_DIR}/lib/include
         ${plog_SOURCE_DIR}/include
 )
-target_link_libraries(test_tier3_integration
+target_link_libraries(test_integration
     PRIVATE
         plog::plog
         Catch2::Catch2WithMain
 )
-add_test(NAME test_tier3_integration COMMAND test_tier3_integration)
+add_test(NAME test_integration COMMAND test_integration)
