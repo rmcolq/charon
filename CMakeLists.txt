@@ -188,3 +188,84 @@ target_link_libraries(test_index
         Catch2::Catch2WithMain
 )
 add_test(NAME test_index COMMAND test_index)
+
+# Test classify_stats (Tier 1 - pure functions)
+add_executable(test_classify_stats
+    test/test_classify_stats.cpp
+)
+target_include_directories(test_classify_stats
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+)
+target_link_libraries(test_classify_stats
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_classify_stats COMMAND test_classify_stats)
+
+# Test utils I/O functions (Tier 1 - file operations)
+add_executable(test_utils_io
+    test/test_utils_io.cpp
+    src/utils.cpp
+)
+target_include_directories(test_utils_io
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/src
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+        ${bzip2_SOURCE_DIR}
+        ${zlib_SOURCE_DIR}
+        ${gzip_SOURCE_DIR}/include
+)
+target_compile_definitions(test_utils_io PRIVATE ZLIB_CONST)
+target_link_libraries(test_utils_io
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_utils_io COMMAND test_utils_io)
+
+# Test InputSummary extended (Tier 1 - data structure)
+add_executable(test_input_summary_extended
+    test/test_input_summary_extended.cpp
+)
+target_include_directories(test_input_summary_extended
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+)
+target_link_libraries(test_input_summary_extended
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_input_summary_extended COMMAND test_input_summary_extended)
+
+# Test InputStats extended (Tier 1 - data structure)
+add_executable(test_input_stats_extended
+    test/test_input_stats_extended.cpp
+)
+target_include_directories(test_input_stats_extended
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+)
+target_link_libraries(test_input_stats_extended
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_input_stats_extended COMMAND test_input_stats_extended)
