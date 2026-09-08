@@ -4,9 +4,13 @@
 #include "utils.hpp"
 #include "index_arguments.hpp"
 
+#include <seqan3/alphabet/nucleotide/dna5.hpp>
+
 #include <filesystem>
 #include <fstream>
 #include <random>
+
+using namespace seqan3::literals;
 
 // ─── make_absolute ───────────────────────────────────────────────────────────
 
