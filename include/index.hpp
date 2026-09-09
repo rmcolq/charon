@@ -62,7 +62,7 @@ public:
         return summary_.num_bins;
     }
 
-    [[nodiscard]] constexpr uint8_t num_categories() const {
+    [[nodiscard]] uint8_t num_categories() const {
         return summary_.num_categories();
     }
 
