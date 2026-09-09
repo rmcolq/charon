@@ -1,6 +1,7 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
+#include <cinttypes>
 
 #include "classify_main.hpp"
 #include "read_entry.hpp"

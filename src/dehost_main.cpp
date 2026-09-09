@@ -1,6 +1,7 @@
 #include <unordered_set>
 #include <iostream>
 #include <algorithm>
+#include <cinttypes>
 
 #include "dehost_main.hpp"
 #include "classify_stats.hpp"

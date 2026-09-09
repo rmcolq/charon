@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <cinttypes>
 #include <ankerl/unordered_dense.h>
 
 #include <cereal/types/string.hpp>

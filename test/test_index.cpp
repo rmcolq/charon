@@ -1,4 +1,5 @@
 #include <catch2/catch_test_macros.hpp>
+#include <cinttypes>
 
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 

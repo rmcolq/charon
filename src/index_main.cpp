@@ -3,6 +3,7 @@
 #include <fstream>
 #include <string>
 #include <algorithm>
+#include <cinttypes>
 #include <ankerl/unordered_dense.h>
 
 #include "index_main.hpp"

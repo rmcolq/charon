@@ -8,8 +8,7 @@
 #include <vector>
 #include <utility>
 
-// This header must be included before this one in files that use ankerl maps
-// We don't include it here to avoid circular dependencies
+// For any files that use ankerl maps, need to include <ankerl/unordered_dense.h> before this file
 
 namespace cereal {
 
