@@ -184,10 +184,10 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
                 records.push_back(std::move(record));
             }
 
-            // Use optimized batch processing with two-pass algorithm
-            process_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(agent)>(
+            // Use optimized batch processing with thread-local agents
+            process_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(index)>(
                 records,
-                agent,
+                index,
                 hash_adaptor,
                 result,
                 opt.min_length,
@@ -254,11 +254,11 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index) {
                 records2.push_back(std::move(record2));
             }
 
-            // Use optimized batch processing for paired reads
-            process_paired_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(agent)>(
+            // Use optimized batch processing for paired reads with thread-local agents
+            process_paired_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(index)>(
                 records1,
                 records2,
-                agent,
+                index,
                 hash_adaptor,
                 result,
                 opt.min_length,

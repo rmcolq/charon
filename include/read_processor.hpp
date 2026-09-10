@@ -192,9 +192,9 @@ void process_single_read(const std::string& read_id,
  * @param is_dehost Flag indicating if this is dehost mode
  * @param total_reads_processed Reference to counter for processed reads
  */
-template<typename record_type, typename result_type, typename hash_adaptor_type, typename agent_type>
+template<typename record_type, typename result_type, typename hash_adaptor_type, typename index_type>
 void process_read_batch(const std::vector<record_type>& records,
-                       agent_type& agent,
+                       const index_type& index,
                        const hash_adaptor_type& hash_adaptor,
                        result_type& result,
                        uint32_t min_length,
@@ -207,63 +207,70 @@ void process_read_batch(const std::vector<record_type>& records,
     const auto& input_summary = result.input_summary();
     
     // Single pass: extract metadata and process immediately
-    #pragma omp parallel for num_threads(num_threads) shared(result, input_summary)
-    for (auto i = 0; i < records.size(); ++i) {
-        try {
-            const auto& record = records[i];
-            
-            // Extract metadata for filtering
-            const auto read_id = first_field(record.id(), " ");
-            const uint32_t read_length = std::ranges::size(record.sequence());
-            
-            // Skip invalid reads
-            if (read_length == 0 || read_length < min_length) {
-                continue;
-            }
-            
-            // Compute mean quality
-            auto qualities = record.base_qualities() |
-                             std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
-            auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
-            float mean_quality = 0.0f;
-            if (std::ranges::size(qualities) > 0) {
-                mean_quality = static_cast<float>(sum) / static_cast<float>(std::ranges::size(qualities));
-            }
-            
-            // Skip low quality reads
-            if (mean_quality < min_quality) {
-                continue;
-            }
-            
-            // Compute compression ratio
-            float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
-            
-            // Create ReadEntry with metadata - use captured input_summary
-            auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, 
-                                 input_summary);
-            
-            // Process hashes immediately - no storage overhead
-            for (auto &&value: record.sequence() | hash_adaptor) {
-                const auto &entry = agent.bulk_contains(value);
-                read.update_entry(entry);
-            }
-            
-            // Post-process: compute counts, proportions, and probabilities - use captured input_summary
-            read.post_process(input_summary);
-            
-            // Add to results (thread-safe)
-            #pragma omp critical(add_read_to_results)
-            {
-                if constexpr (requires { result.add_read(read, record, is_dehost); }) {
-                    result.add_read(read, record, is_dehost);
-                } else {
-                    result.add_read(read, record);
+    // Each thread gets its own agent to avoid race conditions
+    #pragma omp parallel num_threads(num_threads)
+    {
+        // Create thread-local agent - this is CRITICAL for thread safety
+        auto thread_agent = index.agent();
+        
+        #pragma omp for shared(result, input_summary)
+        for (auto i = 0; i < records.size(); ++i) {
+            try {
+                const auto& record = records[i];
+                
+                // Extract metadata for filtering
+                const auto read_id = first_field(record.id(), " ");
+                const uint32_t read_length = std::ranges::size(record.sequence());
+                
+                // Skip invalid reads
+                if (read_length == 0 || read_length < min_length) {
+                    continue;
                 }
+                
+                // Compute mean quality
+                auto qualities = record.base_qualities() |
+                                 std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
+                auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
+                float mean_quality = 0.0f;
+                if (std::ranges::size(qualities) > 0) {
+                    mean_quality = static_cast<float>(sum) / static_cast<float>(std::ranges::size(qualities));
+                }
+                
+                // Skip low quality reads
+                if (mean_quality < min_quality) {
+                    continue;
+                }
+                
+                // Compute compression ratio
+                float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
+                
+                // Create ReadEntry with metadata - use captured input_summary
+                auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, 
+                                     input_summary);
+                
+                // Process hashes immediately - no storage overhead using thread-local agent
+                for (auto &&value: record.sequence() | hash_adaptor) {
+                    const auto &entry = thread_agent.bulk_contains(value);
+                    read.update_entry(entry);
+                }
+                
+                // Post-process: compute counts, proportions, and probabilities - use captured input_summary
+                read.post_process(input_summary);
+                
+                // Add to results (thread-safe)
+                #pragma omp critical(add_read_to_results)
+                {
+                    if constexpr (requires { result.add_read(read, record, is_dehost); }) {
+                        result.add_read(read, record, is_dehost);
+                    } else {
+                        result.add_read(read, record);
+                    }
+                }
+                
+            } catch (const std::exception& e) {
+                PLOG_ERROR << "Error processing read " << records[i].id() << ": " << e.what();
+                // Continue processing other reads
             }
-            
-        } catch (const std::exception& e) {
-            PLOG_ERROR << "Error processing read " << records[i].id() << ": " << e.what();
-            // Continue processing other reads
         }
     }
     
@@ -290,10 +297,10 @@ void process_read_batch(const std::vector<record_type>& records,
  * @param num_threads Number of OpenMP threads to use
  * @param total_reads_processed Reference to counter for processed read pairs
  */
-template<typename record_type, typename result_type, typename hash_adaptor_type, typename agent_type>
+template<typename record_type, typename result_type, typename hash_adaptor_type, typename index_type>
 void process_paired_read_batch(const std::vector<record_type>& records1,
                               const std::vector<record_type>& records2,
-                              agent_type& agent,
+                              const index_type& index,
                               const hash_adaptor_type& hash_adaptor,
                               result_type& result,
                               uint32_t min_length,
@@ -304,76 +311,83 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
     const auto& input_summary = result.input_summary();
     
     // Single pass: process paired reads in parallel
-    #pragma omp parallel for num_threads(num_threads) shared(result, input_summary)
-    for (auto i = 0; i < records1.size(); ++i) {
-        try {
-            const auto& record1 = records1[i];
-            const auto& record2 = records2[i];
-            
-            // Validate pairing
-            auto id1 = record1.id();
-            id1.erase(id1.size() - 1);
-            auto id2 = record2.id();
-            id2.erase(id2.size() - 1);
-            if (id1 != id2) {
-                std::cout << id1 << " " << id2;
-                throw std::runtime_error("Your pairs don't match for read ids.");
+    // Each thread gets its own agent to avoid race conditions
+    #pragma omp parallel num_threads(num_threads)
+    {
+        // Create thread-local agent - this is CRITICAL for thread safety
+        auto thread_agent = index.agent();
+        
+        #pragma omp for shared(result, input_summary)
+        for (auto i = 0; i < records1.size(); ++i) {
+            try {
+                const auto& record1 = records1[i];
+                const auto& record2 = records2[i];
+                
+                // Validate pairing
+                auto id1 = record1.id();
+                id1.erase(id1.size() - 1);
+                auto id2 = record2.id();
+                id2.erase(id2.size() - 1);
+                if (id1 != id2) {
+                    std::cout << id1 << " " << id2;
+                    throw std::runtime_error("Your pairs don't match for read ids.");
+                }
+                
+                // Extract metadata for both reads
+                const auto read_id = first_field(record1.id(), " ");
+                const uint32_t length1 = std::ranges::size(record1.sequence());
+                const uint32_t length2 = std::ranges::size(record2.sequence());
+                
+                // Skip invalid reads
+                if (length1 == 0 || length2 == 0 || length1 < min_length || length2 < min_length) {
+                    continue;
+                }
+                
+                // Compute mean qualities
+                auto quals1 = record1.base_qualities() | std::views::transform([](auto q) { return seqan3::to_phred(q); });
+                auto quals2 = record2.base_qualities() | std::views::transform([](auto q) { return seqan3::to_phred(q); });
+                auto sum1 = std::accumulate(quals1.begin(), quals1.end(), 0);
+                auto sum2 = std::accumulate(quals2.begin(), quals2.end(), 0);
+                float mean_qual1 = (std::ranges::size(quals1) > 0) ? static_cast<float>(sum1) / static_cast<float>(std::ranges::size(quals1)) : 0.0f;
+                float mean_qual2 = (std::ranges::size(quals2) > 0) ? static_cast<float>(sum2) / static_cast<float>(std::ranges::size(quals2)) : 0.0f;
+                
+                // Combine metadata for paired reads
+                const uint32_t read_length = length1 + length2;
+                
+                // Combined mean quality
+                const float total_qual = (mean_qual1 * length1) + (mean_qual2 * length2);
+                const float mean_quality = (read_length > 0) 
+                    ? total_qual / static_cast<float>(read_length) 
+                    : 0.0f;
+                
+                // Combined compression ratio
+                const auto combined_seq = sequence_to_string(record1.sequence()) + 
+                                         sequence_to_string(record2.sequence());
+                const float compression_ratio = get_compression_ratio(combined_seq);
+                
+                // Create ReadEntry with combined metadata - use captured input_summary
+                auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio,
+                                     input_summary);
+                
+                // Process hashes from both reads immediately using thread-local agent
+                for (auto &&value: record1.sequence() | hash_adaptor) {
+                    const auto &entry = thread_agent.bulk_contains(value);
+                    read.update_entry(entry);
+                }
+                
+                for (auto &&value: record2.sequence() | hash_adaptor) {
+                    const auto &entry = thread_agent.bulk_contains(value);
+                    read.update_entry(entry);
+                }
+                
+                read.post_process(input_summary);
+                
+                #pragma omp critical(add_read_to_results)
+                result.add_paired_read(read, record1, record2);
+                
+            } catch (const std::exception& e) {
+                PLOG_ERROR << "Error processing paired read " << records1[i].id() << ": " << e.what();
             }
-            
-            // Extract metadata for both reads
-            const auto read_id = first_field(record1.id(), " ");
-            const uint32_t length1 = std::ranges::size(record1.sequence());
-            const uint32_t length2 = std::ranges::size(record2.sequence());
-            
-            // Skip invalid reads
-            if (length1 == 0 || length2 == 0 || length1 < min_length || length2 < min_length) {
-                continue;
-            }
-            
-            // Compute mean qualities
-            auto quals1 = record1.base_qualities() | std::views::transform([](auto q) { return seqan3::to_phred(q); });
-            auto quals2 = record2.base_qualities() | std::views::transform([](auto q) { return seqan3::to_phred(q); });
-            auto sum1 = std::accumulate(quals1.begin(), quals1.end(), 0);
-            auto sum2 = std::accumulate(quals2.begin(), quals2.end(), 0);
-            float mean_qual1 = (std::ranges::size(quals1) > 0) ? static_cast<float>(sum1) / static_cast<float>(std::ranges::size(quals1)) : 0.0f;
-            float mean_qual2 = (std::ranges::size(quals2) > 0) ? static_cast<float>(sum2) / static_cast<float>(std::ranges::size(quals2)) : 0.0f;
-            
-            // Combine metadata for paired reads
-            const uint32_t read_length = length1 + length2;
-            
-            // Combined mean quality
-            const float total_qual = (mean_qual1 * length1) + (mean_qual2 * length2);
-            const float mean_quality = (read_length > 0) 
-                ? total_qual / static_cast<float>(read_length) 
-                : 0.0f;
-            
-            // Combined compression ratio
-            const auto combined_seq = sequence_to_string(record1.sequence()) + 
-                                     sequence_to_string(record2.sequence());
-            const float compression_ratio = get_compression_ratio(combined_seq);
-            
-            // Create ReadEntry with combined metadata - use captured input_summary
-            auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio,
-                                 input_summary);
-            
-            // Process hashes from both reads immediately - no storage overhead
-            for (auto &&value: record1.sequence() | hash_adaptor) {
-                const auto &entry = agent.bulk_contains(value);
-                read.update_entry(entry);
-            }
-            
-            for (auto &&value: record2.sequence() | hash_adaptor) {
-                const auto &entry = agent.bulk_contains(value);
-                read.update_entry(entry);
-            }
-            
-            read.post_process(input_summary);
-            
-            #pragma omp critical(add_read_to_results)
-            result.add_paired_read(read, record1, record2);
-            
-        } catch (const std::exception& e) {
-            PLOG_ERROR << "Error processing paired read " << records1[i].id() << ": " << e.what();
         }
     }
     
