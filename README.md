@@ -138,3 +138,24 @@ Outputs:
 The probability score is the relative probability of seeing the number of unique hits against this category if the read is truly from the positive distribution, rather than the negative distribution.
 
 If `extract_file` and `--prefix` specified, will output a file with a subset of input reads belonging to the names index category. Specifying `--extract all` will generate a file for both host and microbial reads (excludes unclassified).
+
+---
+
+## Credits
+
+**Design & development:** [Rachel Colquhoun](https://github.com/rmcolq)
+
+**Coding:** [Rachel Colquhoun](https://github.com/rmcolq), with collaboration from ELM Qwen-3.5 for release 1.1.0
+
+---
+
+## Funding
+
+Development of Charon has been supported by:
+
+- **Wellcome Trust** — through the [ARTIC Network](https://artic.network/), a project developing rapid genomic surveillance and outbreak response tools for viral pathogens (Discretionary Award 313694/Z/24/Z and Collaborative Award 206298/Z/17/Z).
+- **Gates Foundation** — supporting open-source genomic epidemiology tools for global health.
+
+### The ARTIC Network
+
+The [ARTIC Network](https://artic.network/) is a collaborative project focused on real-time genomic surveillance of viral outbreaks. It develops open laboratory protocols, bioinformatics pipelines, and analysis tools — including Charon — to enable rapid phylogenetic analysis during public health emergencies. ARTIC tools have been deployed in responses to Ebola, SARS-CoV-2, and other viral outbreaks worldwide.
