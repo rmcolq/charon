@@ -5,6 +5,7 @@
 
 #include <cstring>
 #include <filesystem>
+#include <ankerl/unordered_dense.h>
 
 /// Collection of all options of classify subcommand.
 struct ClassifyArguments {
@@ -32,7 +33,7 @@ struct ClassifyArguments {
     bool run_extract{false};
     std::string category_to_extract;
     std::string prefix;
-    std::unordered_map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
+    ankerl::unordered_dense::map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
 
     // General options
     std::string log_file{"charon.log"};

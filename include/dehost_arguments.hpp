@@ -4,6 +4,7 @@
 #pragma once
 
 #include <cstring>
+#include <ankerl/unordered_dense.h>
 
 /// Collection of all options of dehost subcommand.
 struct DehostArguments {
@@ -17,7 +18,7 @@ struct DehostArguments {
     bool run_extract{false};
     std::string category_to_extract;
     std::string prefix;
-    std::unordered_map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
+    ankerl::unordered_dense::map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
 
     uint8_t chunk_size{100};
 

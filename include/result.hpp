@@ -4,6 +4,7 @@
 #pragma once
 
 #include <string>
+#include <ankerl/unordered_dense.h>
 
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 #include <seqan3/io/sequence_file/output.hpp>
@@ -41,7 +42,7 @@ private:
     std::vector<ReadRecord<record_type>> cached_reads_;
 
     bool run_extract_;
-    std::unordered_map<uint8_t, std::vector<seqan3::sequence_file_output<outfile_field_ids, outfile_format>>> extract_handles_;
+    ankerl::unordered_dense::map<uint8_t, std::vector<seqan3::sequence_file_output<outfile_field_ids, outfile_format>>> extract_handles_;
 
 public:
     Result() = default;
@@ -60,6 +61,7 @@ public:
             input_summary_{summary},
             result_summary_(summary.num_categories()),
             run_extract_(opt.run_extract) {
+        result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
         stats_model_ = StatsModel(opt, summary);
         if (opt.run_extract) {
             for (const auto [category_index, extract_files]: opt.extract_category_to_file) {
@@ -76,6 +78,7 @@ public:
             input_summary_{summary},
             result_summary_(summary.num_categories()),
             run_extract_(opt.run_extract) {
+        result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
         stats_model_ = StatsModel(opt, summary);
         if (opt.run_extract) {
             for (const auto [category_index, extract_files]: opt.extract_category_to_file) {

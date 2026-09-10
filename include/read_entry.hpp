@@ -5,6 +5,7 @@
 
 #include <string>
 #include <algorithm>
+#include <ankerl/unordered_dense.h>
 
 #include <plog/Log.h>
 
@@ -22,7 +23,7 @@ private:
 
     uint32_t num_hashes_{0};
     std::vector<seqan3::interleaved_bloom_filter<seqan3::compressed>::membership_agent_type::binning_bitvector> bits_;// this collects over all bins
-    std::unordered_map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
+    ankerl::unordered_dense::map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
     std::vector<uint32_t> counts_;
     std::vector<uint32_t> unique_counts_;
     std::vector<float> proportions_; // this collects over categories the proportion of all hashes which were from the given category
@@ -40,8 +41,6 @@ public:
     ReadEntry &operator=(ReadEntry const &) = default;
 
     ReadEntry &operator=(ReadEntry &&) = default;
-
-    ~ReadEntry() = default;
 
     ReadEntry(const std::string &read_id, const uint32_t &length, const float &mean_quality, const float &compression,
               const InputSummary &summary) :
@@ -63,23 +62,26 @@ public:
         PLOG_VERBOSE << "Initializing complete for read_id " << read_id;
     }
 
-    const std::string &read_id() const {
+    // Explicit destructor to ensure proper cleanup (RAII)
+    ~ReadEntry() = default;
+
+    [[nodiscard]] const std::string &read_id() const {
         return read_id_;
     }
 
-    const std::vector<float> &proportions() const {
+    [[nodiscard]] const std::vector<float> &proportions() const {
         return proportions_;
     }
 
-    const std::vector<float> &unique_proportions() const {
+    [[nodiscard]] const std::vector<float> &unique_proportions() const {
         return unique_proportions_;
     }
 
-    const uint8_t call() const {
+    [[nodiscard]] const uint8_t call() const {
         return call_;
     }
 
-    const uint8_t confidence_score() const {
+    [[nodiscard]] const uint8_t confidence_score() const {
         return confidence_score_;
     }
 

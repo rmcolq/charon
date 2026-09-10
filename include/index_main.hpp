@@ -5,6 +5,7 @@
 
 #include <omp.h>
 #include <cstring>
+#include <ankerl/unordered_dense.h>
 
 #include "CLI11.hpp"
 #include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
@@ -24,11 +25,11 @@ InputSummary parse_input_file(const std::filesystem::path &input_file);
 
 InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary &summary);
 
-std::unordered_map<uint8_t, std::vector<uint8_t>>
+ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>>
 optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats);
 
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
-                  const std::unordered_map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map);
+                  const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map);
 
 int index_main(IndexArguments &opt);
 

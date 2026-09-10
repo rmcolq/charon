@@ -3,76 +3,98 @@
 
 #include <plog/Log.h>
 #include <gzip/compress.hpp>
+#include <ankerl/unordered_dense.h>
 
-std::filesystem::path make_absolute(std::filesystem::path path) { return std::filesystem::absolute(path); }
+std::filesystem::path make_absolute(const std::filesystem::path& path) {
+    return std::filesystem::absolute(path);
+}
 
-std::vector<std::string> split(const std::string &s, const std::string &delimiter) {
+std::optional<std::vector<std::string>> split(std::string_view s, std::string_view delimiter) {
+    if (s.find(delimiter) == std::string_view::npos) {
+        return std::nullopt;
+    }
     std::vector<std::string> substrings;
-
-    int start, end = -1 * delimiter.size();
-    do {
+    size_t start = 0;
+    size_t end;
+    while ((end = s.find(delimiter, start)) != std::string_view::npos) {
+        substrings.emplace_back(s.substr(start, end - start));
         start = end + delimiter.size();
-        end = s.find(delimiter, start);
-        substrings.push_back(s.substr(start, end - start));
-    } while (end != -1);
-
+    }
+    substrings.emplace_back(s.substr(start));
     return substrings;
 }
 
-bool ends_with(std::string str, std::string suffix) {
-    return str.size() >= suffix.size() && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
-}
-
-bool starts_with(std::string str, std::string prefix) {
-    return str.size() >= prefix.size() && str.compare(0, prefix.size(), prefix) == 0;
-}
-
-void store_hashes(const std::string target,
-                  const std::unordered_set<uint64_t> &hashes,
-                  const std::string tmp_output_folder) {
-    /*
-     * store hashes from set to disk in the specified folder (or current folder ".")
-     */
-    std::filesystem::path outf{tmp_output_folder};
-    outf += "/" + target + ".min";
-    std::ofstream outfile{outf, std::ios::binary | std::ios::app};
-    for (auto &&h: hashes) {
-        outfile.write(reinterpret_cast< const char * >( &h ), sizeof(h));
+std::string first_field(std::string_view s, std::string_view delimiter) {
+    const size_t pos = s.find(delimiter);
+    if (pos == std::string_view::npos) {
+        return std::string{s};
     }
-    outfile.close();
+    return std::string{s.substr(0, pos)};
 }
 
+bool ends_with(std::string_view str, std::string_view suffix) {
+    return str.size() >= suffix.size()
+        && str.compare(str.size() - suffix.size(), suffix.size(), suffix) == 0;
+}
 
-std::vector<uint64_t> load_hashes(const std::string target,
-                                  const std::string tmp_output_folder) {
-    /*
-     * load hashes file from disk and returns them in a vector
-     */
-    uint64_t hash;
-    std::vector<uint64_t> hashes;
-    std::filesystem::path file{tmp_output_folder};
-    file += "/" + target + ".min";
+bool starts_with(std::string_view str, std::string_view prefix) {
+    return str.size() >= prefix.size()
+        && str.compare(0, prefix.size(), prefix) == 0;
+}
+
+void store_hashes(std::string_view target,
+                  const ankerl::unordered_dense::set<uint64_t>& hashes,
+                  const std::filesystem::path& tmp_output_folder) {
+    const std::filesystem::path outf = tmp_output_folder / (std::string{target} + ".min");
+    std::ofstream outfile{outf, std::ios::binary | std::ios::app};
+    if (!outfile.is_open()) {
+        throw std::runtime_error{"Failed to open file for writing: " + outf.string()};
+    }
+    for (const auto& h : hashes) {
+        outfile.write(reinterpret_cast<const char*>(&h), sizeof(h));
+    }
+    // outfile automatically closed by RAII
+}
+
+std::vector<uint64_t> load_hashes(std::string_view target,
+                                  const std::filesystem::path& tmp_output_folder) {
+    const std::filesystem::path file = tmp_output_folder / (std::string{target} + ".min");
     std::ifstream infile{file, std::ios::binary};
-    while (infile.read(reinterpret_cast< char * >( &hash ), sizeof(hash)))
+    if (!infile.is_open()) {
+        throw std::runtime_error{"Failed to open file for reading: " + file.string()};
+    }
+    
+    // Get file size to reserve space
+    infile.seekg(0, std::ios::end);
+    const auto file_size = infile.tellg();
+    infile.seekg(0, std::ios::beg);
+    
+    std::vector<uint64_t> hashes;
+    const size_t expected_count = file_size / sizeof(uint64_t);
+    hashes.reserve(expected_count);  // Prevent reallocations
+    
+    uint64_t hash;
+    while (infile.read(reinterpret_cast<char*>(&hash), sizeof(hash))) {
         hashes.push_back(hash);
+    }
     return hashes;
 }
 
-void delete_hashes(const std::vector<uint8_t> &targets, const std::string tmp_output_folder) {
-    /*
-     * delete hashes from disk
-     */
-    for (const auto &target: targets) {
+void delete_hashes(const std::vector<uint8_t>& targets, const std::string& tmp_output_folder) {
+    for (const auto& target : targets) {
         std::filesystem::path outf{tmp_output_folder};
         outf += "/" + std::to_string(target) + ".min";
-        if (std::filesystem::exists(outf))
+        if (std::filesystem::exists(outf)) {
             std::filesystem::remove(outf);
+        }
     }
-    if (std::filesystem::is_empty(tmp_output_folder))
+    if (std::filesystem::is_empty(tmp_output_folder)) {
         std::filesystem::remove(tmp_output_folder);
+    }
 }
 
-size_t bin_size_in_bits(const IndexArguments &opt, const uint64_t &num_elements) {
+// TODO: consider passing num_hash, max_fpr, and bits as plain scalars for testability
+size_t bin_size_in_bits(const IndexArguments& opt, const uint64_t num_elements) {
     assert(opt.num_hash > 0);
     assert(opt.max_fpr > 0.0);
     assert(opt.max_fpr < 1.0);
@@ -82,14 +104,15 @@ size_t bin_size_in_bits(const IndexArguments &opt, const uint64_t &num_elements)
     double const result{std::ceil(numerator / denominator)};
 
     if (result > opt.bits) {
-        PLOG_WARNING << "Require " << +result << " bits for max_fpr " << opt.max_fpr << " but only have " << +opt.bits
-                     << " bits available";
+        PLOG_WARNING << "Require " << +result << " bits for max_fpr " << opt.max_fpr
+                     << " but only have " << +opt.bits << " bits available";
         return opt.bits;
     }
-    return result;
+    return static_cast<size_t>(result);
 }
 
-size_t max_num_hashes_for_fpr(const IndexArguments &opt) {
+// TODO: same as bin_size_in_bits — consider plain scalar parameters for testability
+size_t max_num_hashes_for_fpr(const IndexArguments& opt) {
     assert(opt.bits > 0);
     assert(opt.max_fpr > 0.0);
     assert(opt.max_fpr < 1.0);
@@ -98,32 +121,30 @@ size_t max_num_hashes_for_fpr(const IndexArguments &opt) {
     double const denominator{std::log(1 - std::exp(std::log(opt.max_fpr) / static_cast<double>(opt.num_hash)))};
     double const result{std::floor(numerator * denominator)};
 
-    return result;
+    return static_cast<size_t>(result);
 }
 
-//std::__tuple_element_t<std::vector<seqan3::dna5>,std::vector<seqan3::phred94>>
-std::string sequence_to_string(
-        const __type_pack_element<0, std::vector<seqan3::dna5>, std::string, std::vector<seqan3::phred94>> &input) {
-    std::vector<char> sequence{};
-    for (auto c: input)
-        sequence.push_back(seqan3::to_char(c));
-    std::string str(sequence.begin(), sequence.end());
+std::string sequence_to_string(const std::vector<seqan3::dna5>& input) {
+    std::string str;
+    str.reserve(input.size());
+    for (const auto& c : input) {
+        str.push_back(seqan3::to_char(c));
+    }
     return str;
 }
 
-float get_compression_ratio(const std::string &sequence) {
-    const char *pointer = sequence.data();
+float get_compression_ratio(const std::string& sequence) {
+    const char* pointer = sequence.data();
     std::size_t initial_size = sequence.size();
 
     std::string compressed_data = gzip::compress(pointer, initial_size);
-    const char *compressed_pointer = compressed_data.data();
     std::size_t compressed_size = compressed_data.size();
 
     assert(compressed_size != 0);
-    return static_cast<double>(compressed_size) / static_cast<double>(initial_size);
+    return static_cast<float>(compressed_size) / static_cast<float>(initial_size);
 }
 
-std::string get_extension(const std::filesystem::path read_file) {
+std::string get_extension(const std::filesystem::path& read_file) {
     auto ext = read_file.extension().string();
     if (ext == ".gz") {
         std::filesystem::path short_read_file = read_file.stem();
