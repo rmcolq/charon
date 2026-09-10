@@ -203,8 +203,11 @@ void process_read_batch(const std::vector<record_type>& records,
                        bool is_dehost,
                        uint64_t& total_reads_processed) {
     
+    // Capture input_summary() BEFORE parallel region to avoid race condition
+    const auto& input_summary = result.input_summary();
+    
     // Single pass: extract metadata and process immediately
-    #pragma omp parallel for num_threads(num_threads) shared(result)
+    #pragma omp parallel for num_threads(num_threads) shared(result, input_summary)
     for (auto i = 0; i < records.size(); ++i) {
         try {
             const auto& record = records[i];
@@ -235,9 +238,9 @@ void process_read_batch(const std::vector<record_type>& records,
             // Compute compression ratio
             float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
             
-            // Create ReadEntry with metadata
+            // Create ReadEntry with metadata - use captured input_summary
             auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, 
-                                 result.input_summary());
+                                 input_summary);
             
             // Process hashes immediately - no storage overhead
             for (auto &&value: record.sequence() | hash_adaptor) {
@@ -245,8 +248,8 @@ void process_read_batch(const std::vector<record_type>& records,
                 read.update_entry(entry);
             }
             
-            // Post-process: compute counts, proportions, and probabilities
-            read.post_process(result.input_summary());
+            // Post-process: compute counts, proportions, and probabilities - use captured input_summary
+            read.post_process(input_summary);
             
             // Add to results (thread-safe)
             #pragma omp critical(add_read_to_results)
@@ -297,8 +300,11 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                               int num_threads,
                               uint64_t& total_reads_processed) {
     
+    // Capture input_summary() BEFORE parallel region to avoid race condition
+    const auto& input_summary = result.input_summary();
+    
     // Single pass: process paired reads in parallel
-    #pragma omp parallel for num_threads(num_threads) shared(result)
+    #pragma omp parallel for num_threads(num_threads) shared(result, input_summary)
     for (auto i = 0; i < records1.size(); ++i) {
         try {
             const auto& record1 = records1[i];
@@ -346,9 +352,9 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                                      sequence_to_string(record2.sequence());
             const float compression_ratio = get_compression_ratio(combined_seq);
             
-            // Create ReadEntry with combined metadata
+            // Create ReadEntry with combined metadata - use captured input_summary
             auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio,
-                                 result.input_summary());
+                                 input_summary);
             
             // Process hashes from both reads immediately - no storage overhead
             for (auto &&value: record1.sequence() | hash_adaptor) {
@@ -361,7 +367,7 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                 read.update_entry(entry);
             }
             
-            read.post_process(result.input_summary());
+            read.post_process(input_summary);
             
             #pragma omp critical(add_read_to_results)
             result.add_paired_read(read, record1, record2);
