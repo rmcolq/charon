@@ -14,20 +14,6 @@
 #include <load_index.hpp>
 #include <index.hpp>
 
-#ifdef __linux__
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#endif
-
-#ifdef __APPLE__
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#endif
-
 /**
  * @brief Progress reporter for long-running index loading operations
  * 
@@ -63,26 +49,6 @@ public:
 };
 
 /**
- * @brief Custom stream buffer that reads from memory without copying
- * 
- * Allows cereal to deserialize directly from mmap'd memory.
- */
-class MemoryBuffer : public std::streambuf {
-private:
-    const char* buffer_;
-    size_t size_;
-    
-public:
-    MemoryBuffer(const char* data, size_t size) : buffer_(data), size_(size) {
-        char* ptr = const_cast<char*>(buffer_);
-        setg(ptr, ptr, ptr + size_);
-    }
-    
-protected:
-    // No underflow needed - all data is already in memory
-};
-
-/**
  * @brief Load index with progress reporting for large files
  * 
  * This function provides:
@@ -114,9 +80,8 @@ inline void load_index_with_progress(Index &index,
                   ? std::to_string(static_cast<int>(file_size_gb * 100) / 100.0) + " GB" 
                   : std::to_string(static_cast<int>(file_size_mb * 100) / 100.0) + " MB");
     
-    // Determine if we should use memory-mapped I/O
-    const bool use_mmap = (file_size > 100 * 1024 * 1024);  // 100MB threshold
-    const bool should_report = report_progress && (file_size > 500 * 1024 * 1024);  // 500MB threshold
+    // Enable progress reporting for large files (>500MB)
+    const bool should_report = report_progress && (file_size > 500 * 1024 * 1024);
     
     // Start progress reporter if needed
     std::atomic<bool> progress_running{should_report};
@@ -128,86 +93,22 @@ inline void load_index_with_progress(Index &index,
         // Note: progress object must outlive the thread
     }
     
-    bool load_successful = false;
-    
     try {
-        if (use_mmap) {
-            PLOG_INFO << "Using memory-mapped I/O for efficient loading";
-            
-#ifdef __linux__
-            int fd = open(path.c_str(), O_RDONLY);
-            if (fd != -1) {
-                void* mapped = mmap(nullptr, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
-                if (mapped != MAP_FAILED) {
-                    // Optimize for sequential access
-                    madvise(mapped, file_size, MADV_SEQUENTIAL);
-                    
-                    // Load directly from memory-mapped region - ZERO COPY!
-                    const char* buffer_ptr = reinterpret_cast<const char*>(mapped);
-                    MemoryBuffer membuf(buffer_ptr, file_size);
-                    std::istream is(&membuf);
-                    cereal::BinaryInputArchive iarchive{is};
-                    iarchive(index);
-                    
-                    munmap(mapped, file_size);
-                    close(fd);
-                    load_successful = true;
-                    
-                    PLOG_INFO << "Index loaded via memory-mapped I/O (zero-copy)";
-                } else {
-                    close(fd);
-                }
-            }
-#elif defined(__APPLE__)
-            int fd = open(path.c_str(), O_RDONLY);
-            if (fd != -1) {
-                void* mapped = mmap(nullptr, file_size, PROT_READ, MAP_PRIVATE, fd, 0);
-                if (mapped != MAP_FAILED) {
-                    madvise(mapped, file_size, MADV_SEQUENTIAL);
-                    
-                    // Load directly from memory-mapped region - ZERO COPY!
-                    const char* buffer_ptr = reinterpret_cast<const char*>(mapped);
-                    MemoryBuffer membuf(buffer_ptr, file_size);
-                    std::istream is(&membuf);
-                    cereal::BinaryInputArchive iarchive{is};
-                    iarchive(index);
-                    
-                    munmap(mapped, file_size);
-                    close(fd);
-                    load_successful = true;
-                    
-                    PLOG_INFO << "Index loaded via memory-mapped I/O (zero-copy)";
-                } else {
-                    close(fd);
-                }
-            }
-#endif
-            
-            // Fall through to standard I/O if mmap failed
-            if (!load_successful) {
-                PLOG_WARNING << "Memory-mapped I/O failed, falling back to standard I/O";
-            }
+        // Use optimized standard I/O with large buffer
+        PLOG_INFO << "Loading index with optimized I/O buffer";
+        std::ifstream is{path, std::ios::binary};
+        
+        if (!is.good()) {
+            throw std::runtime_error("Failed to open index file: " + path.string());
         }
         
-        // Standard I/O fallback
-        if (!load_successful) {
-            PLOG_VERBOSE << "Using standard binary I/O for index loading";
-            std::ifstream is{path, std::ios::binary};
-            
-            if (!is.good()) {
-                throw std::runtime_error("Failed to open index file: " + path.string());
-            }
-            
-            // Optimize buffer for large file reading
-            constexpr size_t BUFFER_SIZE = 1024 * 1024;  // 1MB buffer
-            std::vector<char> buffer(BUFFER_SIZE);
-            is.rdbuf()->pubsetbuf(buffer.data(), BUFFER_SIZE);
-            
-            cereal::BinaryInputArchive iarchive{is};
-            iarchive(index);
-            
-            PLOG_INFO << "Index loaded via standard I/O";
-        }
+        // Set large buffer for efficient reading (1MB)
+        constexpr size_t BUFFER_SIZE = 1024 * 1024;
+        std::vector<char> buffer(BUFFER_SIZE);
+        is.rdbuf()->pubsetbuf(buffer.data(), BUFFER_SIZE);
+        
+        cereal::BinaryInputArchive iarchive{is};
+        iarchive(index);
         
         // Stop progress reporter
         if (should_report) {
