@@ -143,7 +143,7 @@ void process_single_read(const std::string& read_id,
                         float mean_quality,
                         float compression_ratio,
                         const std::vector<uint64_t>& hashes,
-                        const agent_type& agent,
+                        agent_type& agent,
                         result_type& result,
                         const record_type& record,
                         bool is_dehost = false) {
@@ -152,7 +152,6 @@ void process_single_read(const std::string& read_id,
                          result.input_summary());
     
     // Process all hashes - tight loop for better branch prediction
-    #pragma omp simd
     for (const auto& hash_value : hashes) {
         const auto &entry = agent.bulk_contains(hash_value);
         read.update_entry(entry);
@@ -199,7 +198,7 @@ void process_single_read(const std::string& read_id,
  */
 template<typename record_type, typename result_type, typename hash_adaptor_type, typename agent_type>
 void process_read_batch(const std::vector<record_type>& records,
-                       const agent_type& agent,
+                       agent_type& agent,
                        const hash_adaptor_type& hash_adaptor,
                        result_type& result,
                        uint32_t min_length,
@@ -276,7 +275,7 @@ void process_read_batch(const std::vector<record_type>& records,
 template<typename record_type, typename result_type, typename hash_adaptor_type, typename agent_type>
 void process_paired_read_batch(const std::vector<record_type>& records1,
                               const std::vector<record_type>& records2,
-                              const agent_type& agent,
+                              agent_type& agent,
                               const hash_adaptor_type& hash_adaptor,
                               result_type& result,
                               uint32_t min_length,
@@ -346,13 +345,11 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                                  result.input_summary());
             
             // Process hashes from both reads
-            #pragma omp simd
             for (const auto& hash_value : hashes1[i]) {
                 const auto &entry = agent.bulk_contains(hash_value);
                 read.update_entry(entry);
             }
             
-            #pragma omp simd
             for (const auto& hash_value : hashes2[i]) {
                 const auto &entry = agent.bulk_contains(hash_value);
                 read.update_entry(entry);

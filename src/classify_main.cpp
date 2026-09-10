@@ -132,10 +132,10 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
     // Initialize memory manager and validate configuration
     MemoryManager mem_mgr(opt.max_memory_gb > 0 ? opt.max_memory_gb * 1024 : 0);
     
-    // Calculate optimal chunk size if not explicitly set
+    // Calculate optimal chunk size if not explicitly set by user
     uint16_t effective_chunk_size = opt.chunk_size;
-    if (CLI::detail::get_default_value(opt.chunk_size) == opt.chunk_size || opt.chunk_size == 100) {
-        // User didn't override chunk_size, calculate optimal
+    if (opt.chunk_size == 100) {
+        // User didn't override chunk_size (100 is the default), calculate optimal
         effective_chunk_size = static_cast<uint16_t>(
             mem_mgr.calculate_optimal_chunk_size(opt.threads)
         );

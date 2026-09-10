@@ -191,8 +191,9 @@ public:
         // - Index typically 2-4GB uncompressed
         // - Leaves 8-10GB for read processing
         
+        unsigned int hw_threads = std::thread::hardware_concurrency();
         size_t threads = std::min(static_cast<size_t>(8), 
-                                 std::thread::hardware_concurrency());
+                                 static_cast<size_t>(hw_threads > 0 ? hw_threads : 8));
         
         // Conservative chunk size for 16GB
         size_t chunk_size = 500;  // Good balance of performance and memory
