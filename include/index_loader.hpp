@@ -63,10 +63,30 @@ public:
 };
 
 /**
+ * @brief Custom stream buffer that reads from memory without copying
+ * 
+ * Allows cereal to deserialize directly from mmap'd memory.
+ */
+class MemoryBuffer : public std::streambuf {
+private:
+    const char* buffer_;
+    size_t size_;
+    
+public:
+    MemoryBuffer(const char* data, size_t size) : buffer_(data), size_(size) {
+        char* ptr = const_cast<char*>(buffer_);
+        setg(ptr, ptr, ptr + size_);
+    }
+    
+protected:
+    // No underflow needed - all data is already in memory
+};
+
+/**
  * @brief Load index with progress reporting for large files
  * 
  * This function provides:
- * 1. Memory-mapped I/O for efficient large file handling
+ * 1. Memory-mapped I/O for efficient large file handling (NO COPY)
  * 2. Progress reporting for files > 500MB
  * 3. Optimized buffer sizes
  * 4. Detailed logging of index statistics
@@ -122,9 +142,10 @@ inline void load_index_with_progress(Index &index,
                     // Optimize for sequential access
                     madvise(mapped, file_size, MADV_SEQUENTIAL);
                     
-                    // Load from memory-mapped region
-                    std::string buffer(reinterpret_cast<const char*>(mapped), file_size);
-                    std::istringstream is{buffer};
+                    // Load directly from memory-mapped region - ZERO COPY!
+                    const char* buffer_ptr = reinterpret_cast<const char*>(mapped);
+                    MemoryBuffer membuf(buffer_ptr, file_size);
+                    std::istream is(&membuf);
                     cereal::BinaryInputArchive iarchive{is};
                     iarchive(index);
                     
@@ -132,7 +153,7 @@ inline void load_index_with_progress(Index &index,
                     close(fd);
                     load_successful = true;
                     
-                    PLOG_INFO << "Index loaded via memory-mapped I/O";
+                    PLOG_INFO << "Index loaded via memory-mapped I/O (zero-copy)";
                 } else {
                     close(fd);
                 }
@@ -144,8 +165,10 @@ inline void load_index_with_progress(Index &index,
                 if (mapped != MAP_FAILED) {
                     madvise(mapped, file_size, MADV_SEQUENTIAL);
                     
-                    std::string buffer(reinterpret_cast<const char*>(mapped), file_size);
-                    std::istringstream is{buffer};
+                    // Load directly from memory-mapped region - ZERO COPY!
+                    const char* buffer_ptr = reinterpret_cast<const char*>(mapped);
+                    MemoryBuffer membuf(buffer_ptr, file_size);
+                    std::istream is(&membuf);
                     cereal::BinaryInputArchive iarchive{is};
                     iarchive(index);
                     
@@ -153,7 +176,7 @@ inline void load_index_with_progress(Index &index,
                     close(fd);
                     load_successful = true;
                     
-                    PLOG_INFO << "Index loaded via memory-mapped I/O";
+                    PLOG_INFO << "Index loaded via memory-mapped I/O (zero-copy)";
                 } else {
                     close(fd);
                 }
