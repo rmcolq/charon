@@ -172,16 +172,12 @@ void process_single_read(const std::string& read_id,
 }
 
 /**
- * @brief Process a batch of reads with optimized two-pass algorithm
+ * @brief Process a batch of reads with optimized single-pass algorithm
  * 
- * PASS 1: Extract metadata and compute all hashes (sequential, cache-friendly)
- * PASS 2: Process hashes in parallel with OpenMP + SIMD hints
- * 
- * This provides:
- * - Better cache locality (metadata and hashes stored contiguously)
- * - Reduced memory fragmentation (pre-allocated vectors)
- * - SIMD vectorization opportunities
- * - Early filtering of invalid reads
+ * Uses a streamlined approach:
+ * - Extract metadata and process hashes immediately (no storage overhead)
+ * - Parallel processing at read level with OpenMP
+ * - Minimal memory allocations for better cache performance
  * 
  * @tparam record_type Type of the sequence records
  * @tparam result_type Type of the result container
@@ -207,41 +203,60 @@ void process_read_batch(const std::vector<record_type>& records,
                        bool is_dehost,
                        uint64_t& total_reads_processed) {
     
-    // PASS 1: Extract metadata and compute hashes (sequential)
-    std::vector<ReadMetadata> metadata(records.size());
-    std::vector<std::vector<uint64_t>> all_hashes(records.size());
-    
-    for (auto i = 0; i < records.size(); ++i) {
-        const auto& record = records[i];
-        
-        // Extract metadata with early filtering
-        metadata[i] = extract_read_metadata(record, min_length, min_quality);
-        
-        // Only compute hashes for valid reads
-        if (metadata[i].is_valid) {
-            all_hashes[i] = compute_read_hashes(record, hash_adaptor);
-        }
-    }
-    
-    // PASS 2: Process reads in parallel
+    // Single pass: extract metadata and process immediately
     #pragma omp parallel for num_threads(num_threads) shared(result)
     for (auto i = 0; i < records.size(); ++i) {
         try {
-            if (!metadata[i].is_valid) {
+            const auto& record = records[i];
+            
+            // Extract metadata for filtering
+            const auto read_id = first_field(record.id(), " ");
+            const uint32_t read_length = std::ranges::size(record.sequence());
+            
+            // Skip invalid reads
+            if (read_length == 0 || read_length < min_length) {
                 continue;
             }
             
-            process_single_read(
-                metadata[i].read_id,
-                metadata[i].length,
-                metadata[i].mean_quality,
-                metadata[i].compression_ratio,
-                all_hashes[i],
-                agent,
-                result,
-                records[i],
-                is_dehost
-            );
+            // Compute mean quality
+            auto qualities = record.base_qualities() |
+                             std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
+            auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
+            float mean_quality = 0.0f;
+            if (std::ranges::size(qualities) > 0) {
+                mean_quality = static_cast<float>(sum) / static_cast<float>(std::ranges::size(qualities));
+            }
+            
+            // Skip low quality reads
+            if (mean_quality < min_quality) {
+                continue;
+            }
+            
+            // Compute compression ratio
+            float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
+            
+            // Create ReadEntry with metadata
+            auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, 
+                                 result.input_summary());
+            
+            // Process hashes immediately - no storage overhead
+            for (auto &&value: record.sequence() | hash_adaptor) {
+                const auto &entry = agent.bulk_contains(value);
+                read.update_entry(entry);
+            }
+            
+            // Post-process: compute counts, proportions, and probabilities
+            read.post_process(result.input_summary());
+            
+            // Add to results (thread-safe)
+            #pragma omp critical(add_read_to_results)
+            {
+                if constexpr (requires { result.add_read(read, record, is_dehost); }) {
+                    result.add_read(read, record, is_dehost);
+                } else {
+                    result.add_read(read, record);
+                }
+            }
             
         } catch (const std::exception& e) {
             PLOG_ERROR << "Error processing read " << records[i].id() << ": " << e.what();
@@ -253,11 +268,11 @@ void process_read_batch(const std::vector<record_type>& records,
 }
 
 /**
- * @brief Process a batch of paired-end reads with optimized algorithm
+ * @brief Process a batch of paired-end reads with optimized single-pass algorithm
  * 
  * Similar to process_read_batch but handles paired-end reads by:
  * - Combining metadata from both reads
- * - Processing hashes from both reads
+ * - Processing hashes immediately (no storage overhead)
  * - Maintaining proper pairing information
  * 
  * @tparam record_type Type of the sequence records
@@ -282,55 +297,46 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                               int num_threads,
                               uint64_t& total_reads_processed) {
     
-    // PASS 1: Extract metadata and compute hashes for both reads
-    std::vector<ReadMetadata> metadata1(records1.size());
-    std::vector<ReadMetadata> metadata2(records2.size());
-    std::vector<std::vector<uint64_t>> hashes1(records1.size());
-    std::vector<std::vector<uint64_t>> hashes2(records2.size());
-    
-    for (auto i = 0; i < records1.size(); ++i) {
-        const auto& record1 = records1[i];
-        const auto& record2 = records2[i];
-        
-        // Validate pairing
-        auto id1 = record1.id();
-        id1.erase(id1.size() - 1);
-        auto id2 = record2.id();
-        id2.erase(id2.size() - 1);
-        if (id1 != id2) {
-            std::cout << id1 << " " << id2;
-            throw std::runtime_error("Your pairs don't match for read ids.");
-        }
-        
-        // Extract metadata for both reads
-        metadata1[i] = extract_read_metadata(record1, min_length, 0.0f);
-        metadata2[i] = extract_read_metadata(record2, min_length, 0.0f);
-        
-        // Compute hashes for valid pairs
-        if (metadata1[i].is_valid && metadata2[i].is_valid) {
-            hashes1[i] = compute_read_hashes(record1, hash_adaptor);
-            hashes2[i] = compute_read_hashes(record2, hash_adaptor);
-        }
-    }
-    
-    // PASS 2: Process paired reads in parallel
+    // Single pass: process paired reads in parallel
     #pragma omp parallel for num_threads(num_threads) shared(result)
     for (auto i = 0; i < records1.size(); ++i) {
         try {
-            if (!metadata1[i].is_valid || !metadata2[i].is_valid) {
-                continue;
-            }
-            
             const auto& record1 = records1[i];
             const auto& record2 = records2[i];
             
+            // Validate pairing
+            auto id1 = record1.id();
+            id1.erase(id1.size() - 1);
+            auto id2 = record2.id();
+            id2.erase(id2.size() - 1);
+            if (id1 != id2) {
+                std::cout << id1 << " " << id2;
+                throw std::runtime_error("Your pairs don't match for read ids.");
+            }
+            
+            // Extract metadata for both reads
+            const auto read_id = first_field(record1.id(), " ");
+            const uint32_t length1 = std::ranges::size(record1.sequence());
+            const uint32_t length2 = std::ranges::size(record2.sequence());
+            
+            // Skip invalid reads
+            if (length1 == 0 || length2 == 0 || length1 < min_length || length2 < min_length) {
+                continue;
+            }
+            
+            // Compute mean qualities
+            auto quals1 = record1.base_qualities() | std::views::transform([](auto q) { return seqan3::to_phred(q); });
+            auto quals2 = record2.base_qualities() | std::views::transform([](auto q) { return seqan3::to_phred(q); });
+            auto sum1 = std::accumulate(quals1.begin(), quals1.end(), 0);
+            auto sum2 = std::accumulate(quals2.begin(), quals2.end(), 0);
+            float mean_qual1 = (std::ranges::size(quals1) > 0) ? static_cast<float>(sum1) / static_cast<float>(std::ranges::size(quals1)) : 0.0f;
+            float mean_qual2 = (std::ranges::size(quals2) > 0) ? static_cast<float>(sum2) / static_cast<float>(std::ranges::size(quals2)) : 0.0f;
+            
             // Combine metadata for paired reads
-            const auto read_id = metadata1[i].read_id;
-            const uint32_t read_length = metadata1[i].length + metadata2[i].length;
+            const uint32_t read_length = length1 + length2;
             
             // Combined mean quality
-            const float total_qual = (metadata1[i].mean_quality * metadata1[i].length) +
-                                    (metadata2[i].mean_quality * metadata2[i].length);
+            const float total_qual = (mean_qual1 * length1) + (mean_qual2 * length2);
             const float mean_quality = (read_length > 0) 
                 ? total_qual / static_cast<float>(read_length) 
                 : 0.0f;
@@ -344,14 +350,14 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
             auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio,
                                  result.input_summary());
             
-            // Process hashes from both reads
-            for (const auto& hash_value : hashes1[i]) {
-                const auto &entry = agent.bulk_contains(hash_value);
+            // Process hashes from both reads immediately - no storage overhead
+            for (auto &&value: record1.sequence() | hash_adaptor) {
+                const auto &entry = agent.bulk_contains(value);
                 read.update_entry(entry);
             }
             
-            for (const auto& hash_value : hashes2[i]) {
-                const auto &entry = agent.bulk_contains(hash_value);
+            for (auto &&value: record2.sequence() | hash_adaptor) {
+                const auto &entry = agent.bulk_contains(value);
                 read.update_entry(entry);
             }
             
