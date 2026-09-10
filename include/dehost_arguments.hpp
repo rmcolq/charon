@@ -20,7 +20,8 @@ struct DehostArguments {
     std::string prefix;
     ankerl::unordered_dense::map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
 
-    uint8_t chunk_size{100};
+    uint16_t chunk_size{100};
+    uint16_t max_memory_gb{0};  // 0 = auto-detect
 
     // Stats options
     float lo_hi_threshold{0.15};
@@ -54,7 +55,8 @@ struct DehostArguments {
         ss += "\tcategory_to_extract:\t\t" + category_to_extract + "\n";
         ss += "\tprefix:\t\t\t\t" + prefix + "\n\n";
 
-        ss += "\tchunk_size:\t\t\t" + std::to_string(chunk_size) + "\n\n";
+        ss += "\tchunk_size:\t\t\t" + std::to_string(chunk_size) + "\n";
+        ss += "\tmax_memory_gb:\t\t\t" + (max_memory_gb > 0 ? std::to_string(max_memory_gb) : "auto") + "\n\n";
         ss += "\tlo_hi_threshold:\t\t" + std::to_string(lo_hi_threshold) + "\n";
         ss += "\tnum_reads_to_fit:\t\t" + std::to_string(num_reads_to_fit) + "\n";
         ss += "\tdist:\t\t\t\t" + dist + "\n\n";

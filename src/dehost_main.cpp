@@ -10,6 +10,7 @@
 #include "load_index.hpp"
 #include "utils.hpp"
 #include "version.h"
+#include "memory_manager.hpp"
 
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
@@ -244,6 +245,12 @@ void setup_dehost_subcommand(CLI::App &app) {
             ->capture_default_str();
 
     dehost_subcommand
+            ->add_option("--max-memory", opt->max_memory_gb,
+                         "Maximum memory to use in GB (0 = auto-detect based on system memory).")
+            ->type_name("GB")
+            ->capture_default_str();
+
+    dehost_subcommand
             ->add_option("--lo_hi_threshold", opt->lo_hi_threshold,
                          "Threshold used during model fitting stage to decide if read should be used to train lo or hi distribution.")
             ->type_name("FLOAT")
@@ -316,6 +323,30 @@ void setup_dehost_subcommand(CLI::App &app) {
 void dehost_reads(const DehostArguments &opt, const Index &index) {
     PLOG_INFO << "Dehosting file " << opt.read_file;
 
+    // Initialize memory manager and validate configuration
+    MemoryManager mem_mgr(opt.max_memory_gb > 0 ? opt.max_memory_gb * 1024 : 0);
+    
+    // Calculate optimal chunk size if not explicitly set
+    uint16_t effective_chunk_size = opt.chunk_size;
+    if (CLI::detail::get_default_value(opt.chunk_size) == opt.chunk_size || opt.chunk_size == 100) {
+        // User didn't override chunk_size, calculate optimal
+        effective_chunk_size = static_cast<uint16_t>(
+            mem_mgr.calculate_optimal_chunk_size(opt.threads)
+        );
+        PLOG_INFO << "Auto-calculated chunk size: " << effective_chunk_size 
+                 << " (based on " << (opt.max_memory_gb > 0 ? opt.max_memory_gb : 75) 
+                 << "% system memory limit)";
+    }
+    
+    // Validate configuration safety
+    if (!mem_mgr.is_configuration_safe(effective_chunk_size, opt.threads)) {
+        PLOG_WARNING << "Configuration may exceed memory limits!";
+        PLOG_WARNING << "Consider reducing --chunk-size or --threads";
+    }
+    
+    // Display memory usage report
+    PLOG_INFO << mem_mgr.get_memory_report(effective_chunk_size, opt.threads);
+
     // Pre-compute hash parameters for better cache locality
     const auto hash_adaptor = seqan3::views::minimiser_hash(
         seqan3::shape{seqan3::ungapped{index.kmer_size()}},
@@ -329,7 +360,7 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
-    records.reserve(opt.chunk_size);
+    records.reserve(effective_chunk_size);
 
     using outfile_field_ids = decltype(fin)::field_ids;
     using outfile_format = decltype(fin)::valid_formats;
@@ -341,7 +372,7 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     uint64_t total_reads_processed = 0;
     
     try {
-        for (auto &&chunk: fin | seqan3::views::chunk(opt.chunk_size)) {
+        for (auto &&chunk: fin | seqan3::views::chunk(effective_chunk_size)) {
             records.clear();
             for (auto &record: chunk) {
                 records.push_back(std::move(record));

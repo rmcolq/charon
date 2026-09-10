@@ -10,6 +10,7 @@
 #include "load_index.hpp"
 #include "utils.hpp"
 #include "version.h"
+#include "memory_manager.hpp"
 
 #include <plog/Log.h>
 #include <plog/Initializers/RollingFileInitializer.h>
@@ -57,6 +58,12 @@ void setup_classify_subcommand(CLI::App &app) {
             ->add_option("--chunk_size", opt->chunk_size,
                          "Read file is read in chunks of this size, to be processed in parallel within a chunk.")
             ->type_name("INT")
+            ->capture_default_str();
+
+    classify_subcommand
+            ->add_option("--max-memory", opt->max_memory_gb,
+                         "Maximum memory to use in GB (0 = auto-detect based on system memory).")
+            ->type_name("GB")
             ->capture_default_str();
 
     classify_subcommand
@@ -122,6 +129,30 @@ void setup_classify_subcommand(CLI::App &app) {
 void classify_reads(const ClassifyArguments &opt, const Index &index) {
     PLOG_INFO << "Classifying file " << opt.read_file;
 
+    // Initialize memory manager and validate configuration
+    MemoryManager mem_mgr(opt.max_memory_gb > 0 ? opt.max_memory_gb * 1024 : 0);
+    
+    // Calculate optimal chunk size if not explicitly set
+    uint16_t effective_chunk_size = opt.chunk_size;
+    if (CLI::detail::get_default_value(opt.chunk_size) == opt.chunk_size || opt.chunk_size == 100) {
+        // User didn't override chunk_size, calculate optimal
+        effective_chunk_size = static_cast<uint16_t>(
+            mem_mgr.calculate_optimal_chunk_size(opt.threads)
+        );
+        PLOG_INFO << "Auto-calculated chunk size: " << effective_chunk_size 
+                 << " (based on " << (opt.max_memory_gb > 0 ? opt.max_memory_gb : 75) 
+                 << "% system memory limit)";
+    }
+    
+    // Validate configuration safety
+    if (!mem_mgr.is_configuration_safe(effective_chunk_size, opt.threads)) {
+        PLOG_WARNING << "Configuration may exceed memory limits!";
+        PLOG_WARNING << "Consider reducing --chunk-size or --threads";
+    }
+    
+    // Display memory usage report
+    PLOG_INFO << mem_mgr.get_memory_report(effective_chunk_size, opt.threads);
+
     // Pre-compute hash parameters for better cache locality
     const auto hash_adaptor = seqan3::views::minimiser_hash(
         seqan3::shape{seqan3::ungapped{index.kmer_size()}},
@@ -135,7 +166,7 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
-    records.reserve(opt.chunk_size);
+    records.reserve(effective_chunk_size);
 
     using outfile_field_ids = decltype(fin)::field_ids;
     using outfile_format = decltype(fin)::valid_formats;
@@ -147,7 +178,7 @@ void classify_reads(const ClassifyArguments &opt, const Index &index) {
     uint64_t total_reads_processed = 0;
     
     try {
-        for (auto &&chunk: fin | seqan3::views::chunk(opt.chunk_size)) {
+        for (auto &&chunk: fin | seqan3::views::chunk(effective_chunk_size)) {
             records.clear();
             for (auto &record: chunk) {
                 records.push_back(std::move(record));
