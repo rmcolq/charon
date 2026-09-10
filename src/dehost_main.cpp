@@ -4,6 +4,7 @@
 #include <cinttypes>
 
 #include "dehost_main.hpp"
+#include "read_processor.hpp"
 #include "classify_stats.hpp"
 #include "index.hpp"
 #include "load_index.hpp"
@@ -315,8 +316,11 @@ void setup_dehost_subcommand(CLI::App &app) {
 void dehost_reads(const DehostArguments &opt, const Index &index) {
     PLOG_INFO << "Dehosting file " << opt.read_file;
 
-    auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}},
-                                                      seqan3::window_size{index.window_size()});
+    // Pre-compute hash parameters for better cache locality
+    const auto hash_adaptor = seqan3::views::minimiser_hash(
+        seqan3::shape{seqan3::ungapped{index.kmer_size()}},
+        seqan3::window_size{index.window_size()}
+    );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
     auto agent = index.agent();
@@ -325,7 +329,7 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
-    records.reserve(opt.chunk_size);  // Prevent reallocations
+    records.reserve(opt.chunk_size);
 
     using outfile_field_ids = decltype(fin)::field_ids;
     using outfile_format = decltype(fin)::valid_formats;
@@ -338,52 +342,23 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     
     try {
         for (auto &&chunk: fin | seqan3::views::chunk(opt.chunk_size)) {
-            records.clear();  // Keeps capacity
+            records.clear();
             for (auto &record: chunk) {
                 records.push_back(std::move(record));
             }
 
-#pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
-            for (auto i = 0; i < records.size(); ++i) {
-                try {
-                    const record_type &record = records[i];
-                    const auto read_id = first_field(record.id(), " ");
-                    const uint32_t read_length = std::ranges::size(record.sequence());
-                    if (read_length > std::numeric_limits<uint32_t>::max()) {
-                        PLOG_WARNING << "Ignoring read " << record.id() << " as too long!";
-                        continue;
-                    }
-                    if (read_length == 0) {
-                        PLOG_WARNING << "Ignoring read " << record.id() << " as has zero length!";
-                        continue;
-                    }
-                    auto qualities = record.base_qualities() |
-                                     std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
-                    auto sum = std::accumulate(qualities.begin(), qualities.end(), 0);
-                    float mean_quality = 0;
-                    if (std::ranges::size(qualities) > 0)
-                        mean_quality = static_cast< float >( sum ) / static_cast< float >(std::ranges::size(qualities));
-                    PLOG_VERBOSE << "Mean quality of read  " << record.id() << " is " << mean_quality;
-
-                    float compression_ratio = get_compression_ratio(sequence_to_string(record.sequence()));
-                    PLOG_VERBOSE << "Found compression ratio of read  " << record.id() << " is " << compression_ratio;
-
-                    auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
-                    for (auto &&value: record.sequence() | hash_adaptor) {
-                        const auto &entry = agent.bulk_contains(value);
-                        read.update_entry(entry);
-                    }
-                    PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
-
-                    read.post_process(result.input_summary());
-#pragma omp critical(add_read_to_results)
-                    result.add_read(read, record, true);
-                } catch (const std::exception& e) {
-                    PLOG_ERROR << "Error processing read " << records[i].id() << ": " << e.what();
-                    // Continue processing other reads
-                }
-            }
-            total_reads_processed += records.size();
+            // Use optimized batch processing with two-pass algorithm
+            process_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(agent)>(
+                records,
+                agent,
+                hash_adaptor,
+                result,
+                opt.min_length,
+                opt.min_quality,
+                opt.threads,
+                true,  // is_dehost = true for dehost
+                total_reads_processed
+            );
         }
     } catch (const seqan3::unexpected_end_of_input& e) {
         PLOG_WARNING << "File appears truncated or corrupted: " << e.what();
@@ -402,8 +377,11 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
 void dehost_paired_reads(const DehostArguments &opt, const Index &index) {
     PLOG_INFO << "Dehosting files " << opt.read_file << " and " << opt.read_file2;
 
-    auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{index.kmer_size()}},
-                                                      seqan3::window_size{index.window_size()});
+    // Pre-compute hash parameters
+    const auto hash_adaptor = seqan3::views::minimiser_hash(
+        seqan3::shape{seqan3::ungapped{index.kmer_size()}},
+        seqan3::window_size{index.window_size()}
+    );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
     auto agent = index.agent();
@@ -414,8 +392,8 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index) {
     using record_type = decltype(fin1)::record_type;
     std::vector<record_type> records1{};
     std::vector<record_type> records2{};
-    records1.reserve(opt.chunk_size);  // Prevent reallocations
-    records2.reserve(opt.chunk_size);  // Prevent reallocations
+    records1.reserve(opt.chunk_size);
+    records2.reserve(opt.chunk_size);
 
     using outfile_field_ids = decltype(fin1)::field_ids;
     using outfile_format = decltype(fin1)::valid_formats;
@@ -428,77 +406,28 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index) {
     
     try {
         for (auto &&chunk: fin1 | seqan3::views::chunk(opt.chunk_size)) {
-            records1.clear();  // Keeps capacity
-            records2.clear();  // Keeps capacity
+            records1.clear();
+            records2.clear();
             for (auto &record: chunk) {
                 records1.push_back(std::move(record));
             }
 
-            // loop in the second file and get same amount of reads
+            // Get corresponding reads from second file
             for (auto &record2: fin2 | std::views::take(opt.chunk_size)) {
                 records2.push_back(std::move(record2));
             }
 
-#pragma omp parallel for firstprivate(agent, hash_adaptor) num_threads(opt.threads) shared(result)
-            for (auto i = 0; i < records1.size(); ++i) {
-                try {
-                    const auto &record1 = records1[i];
-                    const auto &record2 = records2[i];
-
-                    auto id1 = record1.id();
-                    id1.erase(id1.size() - 1);
-                    auto id2 = record2.id();
-                    id2.erase(id2.size() - 1);
-                    if (id1 != id2) {
-                        std::cout << id1 << " " << id2;
-                        throw std::runtime_error("Your pairs don't match for read ids.");
-                    }
-                    const auto read_id = first_field(record1.id(), " ");
-                    const uint32_t read_length = std::ranges::size(record1.sequence()) + std::ranges::size(record2.sequence());
-                    if (read_length > std::numeric_limits<uint32_t>::max()) {
-                        PLOG_WARNING << "Ignoring read " << record1.id() << " as too long!";
-                        continue;
-                    }
-                    if (read_length == 0) {
-                        PLOG_WARNING << "Ignoring read " << record1.id() << " as has zero length!";
-                        continue;
-                    }
-                    auto qualities1 = record1.base_qualities() |
-                                      std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
-                    auto qualities2 = record2.base_qualities() |
-                                      std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
-                    auto sum = std::accumulate(qualities1.begin(), qualities1.end(), 0);
-                    sum = std::accumulate(qualities2.begin(), qualities2.end(), sum);
-                    float mean_quality = 0;
-                    if (std::ranges::size(qualities1) + std::ranges::size(qualities2) > 0)
-                        mean_quality = static_cast< float >( sum ) /
-                                       static_cast< float >(std::ranges::size(qualities1) + std::ranges::size(qualities2));
-                    PLOG_VERBOSE << "Mean quality of read  " << record1.id() << " is " << mean_quality;
-
-                    auto combined_record = sequence_to_string(record1.sequence()) + sequence_to_string(record2.sequence());
-                    float compression_ratio = get_compression_ratio(combined_record);
-                    PLOG_VERBOSE << "Found compression ratio of read  " << record1.id() << " is " << compression_ratio;
-
-                    auto read = ReadEntry(read_id, read_length, mean_quality, compression_ratio, result.input_summary());
-                    for (auto &&value: record1.sequence() | hash_adaptor) {
-                        const auto &entry = agent.bulk_contains(value);
-                        read.update_entry(entry);
-                    }
-                    for (auto &&value: record2.sequence() | hash_adaptor) {
-                        const auto &entry = agent.bulk_contains(value);
-                        read.update_entry(entry);
-                    }
-                    PLOG_VERBOSE << "Finished adding raw hash counts for read " << read_id;
-
-                    read.post_process(result.input_summary());
-#pragma omp critical(add_read_to_results)
-                    result.add_paired_read(read, record1, record2);
-                } catch (const std::exception& e) {
-                    PLOG_ERROR << "Error processing paired read " << records1[i].id() << ": " << e.what();
-                    // Continue processing other reads
-                }
-            }
-            total_reads_processed += records1.size();
+            // Use optimized batch processing for paired reads
+            process_paired_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(agent)>(
+                records1,
+                records2,
+                agent,
+                hash_adaptor,
+                result,
+                opt.min_length,
+                opt.threads,
+                total_reads_processed
+            );
         }
     } catch (const seqan3::unexpected_end_of_input& e) {
         PLOG_WARNING << "Paired file appears truncated or corrupted: " << e.what();
