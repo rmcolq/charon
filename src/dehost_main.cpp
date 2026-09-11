@@ -323,30 +323,6 @@ void setup_dehost_subcommand(CLI::App &app) {
 void dehost_reads(const DehostArguments &opt, const Index &index) {
     PLOG_INFO << "Dehosting file " << opt.read_file;
 
-    // Initialize memory manager and validate configuration
-    MemoryManager mem_mgr(opt.max_memory_gb > 0 ? opt.max_memory_gb * 1024 : 0);
-    
-    // Calculate optimal chunk size if not explicitly set by user
-    uint16_t effective_chunk_size = opt.chunk_size;
-    if (opt.chunk_size == 100) {
-        // User didn't override chunk_size (100 is the default), calculate optimal
-        effective_chunk_size = static_cast<uint16_t>(
-            mem_mgr.calculate_optimal_chunk_size(opt.threads)
-        );
-        PLOG_INFO << "Auto-calculated chunk size: " << effective_chunk_size 
-                 << " (based on " << (opt.max_memory_gb > 0 ? opt.max_memory_gb : 75) 
-                 << "% system memory limit)";
-    }
-    
-    // Validate configuration safety
-    if (!mem_mgr.is_configuration_safe(effective_chunk_size, opt.threads)) {
-        PLOG_WARNING << "Configuration may exceed memory limits!";
-        PLOG_WARNING << "Consider reducing --chunk-size or --threads";
-    }
-    
-    // Display memory usage report
-    PLOG_INFO << mem_mgr.get_memory_report(effective_chunk_size, opt.threads);
-
     // Pre-compute hash parameters for better cache locality
     const auto hash_adaptor = seqan3::views::minimiser_hash(
         seqan3::shape{seqan3::ungapped{index.kmer_size()}},
@@ -360,7 +336,7 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
     std::vector<record_type> records{};
-    records.reserve(effective_chunk_size);
+    records.reserve(opt.chunk_size);
 
     using outfile_field_ids = decltype(fin)::field_ids;
     using outfile_format = decltype(fin)::valid_formats;
@@ -372,7 +348,7 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     uint64_t total_reads_processed = 0;
     
     try {
-        for (auto &&chunk: fin | seqan3::views::chunk(effective_chunk_size)) {
+        for (auto &&chunk: fin | seqan3::views::chunk(opt.chunk_size)) {
             records.clear();
             for (auto &record: chunk) {
                 records.push_back(std::move(record));
@@ -492,13 +468,41 @@ int dehost_main(DehostArguments &opt) {
         opt.min_length = 80;
     }
 
+    // Initialize memory manager and validate configuration
+    MemoryManager mem_mgr(opt.max_memory_gb > 0 ? opt.max_memory_gb * 1024 : 0);
+    
+    // Calculate optimal chunk size if not explicitly set by user
+    if (opt.chunk_size == 0) {
+        // User didn't override chunk_size (0 is the default), calculate optimal
+        opt.chunk_size = static_cast<uint16_t>(
+            mem_mgr.calculate_optimal_chunk_size(opt.threads)
+        );
+        PLOG_INFO << "Auto-calculated chunk size: " << opt.chunk_size 
+                 << " (based on " << (opt.max_memory_gb > 0 ? opt.max_memory_gb : 75) 
+                 << "% system memory limit)";
+    }
+    
+    // Validate configuration safety
+    if (!mem_mgr.is_configuration_safe(opt.chunk_size, opt.threads)) {
+        PLOG_WARNING << "Configuration may exceed memory limits!";
+        PLOG_WARNING << "Consider reducing --chunk-size or --threads";
+    }
+    
+    // Display memory usage report
+    PLOG_INFO << mem_mgr.get_memory_report(opt.chunk_size, opt.threads);
+
+    if (opt.num_reads_to_fit < opt.chunk_size) {
+        PLOG_WARNING << "num_reads_to_fit is less than chunk_size, adjusting to chunk_size to reduce random-effects in model fitting.";
+        opt.num_reads_to_fit = opt.chunk_size;
+    }
+    
     auto args = opt.to_string();
-    LOG_INFO << "Running charon dehost\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
+    PLOG_INFO << "Running charon dehost\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
 
     auto index = Index();
     load_index(index, opt.db);
     auto host_index = index.get_host_index();
-    LOG_INFO << "Found host at index " << +host_index << " in the index categories";
+    PLOG_INFO << "Found host at index " << +host_index << " in the index categories";
 
     opt.run_extract = (opt.category_to_extract != "");
     const auto categories = index.categories();
