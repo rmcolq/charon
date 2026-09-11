@@ -10,6 +10,10 @@
 
 #include <plog/Log.h>
 
+#ifdef __APPLE__
+#include <sys/sysctl.h>
+#endif
+
 /**
  * @brief Memory usage estimator and manager for Charon
  * 
