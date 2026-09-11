@@ -213,7 +213,7 @@ void process_read_batch(const std::vector<record_type>& records,
         // Create thread-local agent - this is CRITICAL for thread safety
         auto thread_agent = index.agent();
         
-        #pragma omp for shared(result, input_summary)
+        #pragma omp for
         for (auto i = 0; i < records.size(); ++i) {
             try {
                 const auto& record = records[i];
@@ -317,7 +317,7 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
         // Create thread-local agent - this is CRITICAL for thread safety
         auto thread_agent = index.agent();
         
-        #pragma omp for shared(result, input_summary)
+        #pragma omp for
         for (auto i = 0; i < records1.size(); ++i) {
             try {
                 const auto& record1 = records1[i];
