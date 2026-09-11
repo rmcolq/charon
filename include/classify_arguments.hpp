@@ -14,7 +14,7 @@ struct ClassifyArguments {
     std::filesystem::path read_file2;
     bool is_paired{false};
     std::string db;
-    uint16_t chunk_size{100};
+    uint16_t chunk_size{500};
     uint16_t max_memory_gb{0};  // 0 = auto-detect (use 75% of system memory)
 
 

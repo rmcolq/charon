@@ -20,7 +20,7 @@ struct DehostArguments {
     std::string prefix;
     ankerl::unordered_dense::map<uint8_t, std::vector<std::filesystem::path>> extract_category_to_file;
 
-    uint16_t chunk_size{100};
+    uint16_t chunk_size{500};
     uint16_t max_memory_gb{0};  // 0 = auto-detect
 
     // Stats options

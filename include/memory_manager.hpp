@@ -54,12 +54,12 @@ public:
         , index_memory_estimate_(index_size_mb * MB)
         , overhead_estimate_(500 * MB)  // Base overhead for application, logs, etc.
     {
-        PLOG_INFO << "Memory Manager initialized";
-        PLOG_INFO << "Total system memory: " << (total_system_memory_ / GB) << " GB";
-        PLOG_INFO << "Maximum allowed memory: " << (max_allowed_memory_ / MB) << " MB";
+        PLOG_VERBOSE << "Memory Manager initialized";
+        PLOG_VERBOSE << "Total system memory: " << (total_system_memory_ / GB) << " GB";
+        PLOG_VERBOSE << "Maximum allowed memory: " << (max_allowed_memory_ / MB) << " MB";
         
         if (index_size_mb > 0) {
-            PLOG_INFO << "Index size estimate: " << (index_size_mb / MB) << " MB";
+            PLOG_VERBOSE << "Index size estimate: " << (index_size_mb / MB) << " MB";
         }
     }
     
@@ -179,32 +179,6 @@ public:
         return safe;
     }
     
-    /**
-     * @brief Get recommended configuration for 16GB systems
-     * 
-     * @return std::pair<chunk_size, threads> Recommended configuration
-     */
-    static std::pair<size_t, size_t> get_recommended_16gb_config() {
-        // For 16GB systems:
-        // - Reserve 4GB for system and other applications
-        // - Use up to 12GB for Charon
-        // - Index typically 2-4GB uncompressed
-        // - Leaves 8-10GB for read processing
-        
-        unsigned int hw_threads = std::thread::hardware_concurrency();
-        size_t threads = std::min(static_cast<size_t>(8), 
-                                 static_cast<size_t>(hw_threads > 0 ? hw_threads : 8));
-        
-        // Conservative chunk size for 16GB
-        size_t chunk_size = 500;  // Good balance of performance and memory
-        
-        PLOG_INFO << "Recommended configuration for 16GB system:";
-        PLOG_INFO << "  - Threads: " << threads;
-        PLOG_INFO << "  - Chunk size: " << chunk_size;
-        PLOG_INFO << "  - Estimated memory: ~8-10 GB";
-        
-        return {chunk_size, threads};
-    }
     
     /**
      * @brief Get human-readable memory report
