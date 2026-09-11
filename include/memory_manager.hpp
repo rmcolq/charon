@@ -56,10 +56,10 @@ public:
     {
         PLOG_VERBOSE << "Memory Manager initialized";
         PLOG_VERBOSE << "Total system memory: " << (total_system_memory_ / GB) << " GB";
-        PLOG_VERBOSE << "Maximum allowed memory: " << (max_allowed_memory_ / MB) << " MB";
+        PLOG_VERBOSE << "Maximum allowed memory: " << (max_allowed_memory_ / GB) << " GB";
         
         if (index_size_mb > 0) {
-            PLOG_VERBOSE << "Index size estimate: " << (index_size_mb / MB) << " MB";
+            PLOG_VERBOSE << "Index size estimate: " << (index_size_mb / GB) << " GB";
         }
     }
     
@@ -154,7 +154,7 @@ public:
         optimal_chunk = std::min(optimal_chunk, static_cast<size_t>(10000)); // Maximum 10000
         
         PLOG_INFO << "Optimal chunk size calculated: " << optimal_chunk 
-                 << " reads (using " << (max_allowed_memory_ / MB) << " MB limit)";
+                 << " reads (using " << (max_allowed_memory_ / GB) << " GB limit)";
         
         return optimal_chunk;
     }
@@ -172,8 +172,8 @@ public:
         
         if (!safe) {
             PLOG_WARNING << "Configuration may exceed memory limit!";
-            PLOG_WARNING << "Estimated: " << (estimated / MB) << " MB, "
-                        << "Limit: " << (max_allowed_memory_ / MB) << " MB";
+            PLOG_WARNING << "Estimated: " << (estimated / GB) << " GB, "
+                        << "Limit: " << (max_allowed_memory_ / GB) << " GB";
         }
         
         return safe;
