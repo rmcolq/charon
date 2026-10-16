@@ -22,6 +22,9 @@ struct DehostArguments {
 
     uint16_t chunk_size{0};  // 0 = auto-detect
     uint16_t max_memory_gb{0};  // 0 = auto-detect
+    // Set from the memory manager at run time (not command line options); 0 = unlimited.
+    uint64_t chunk_base_budget{0};  // maximum bases (summed read length) in one chunk
+    uint64_t cache_byte_budget{0};  // maximum bytes of reads cached while the model is fitted
 
     // Stats options
     float lo_hi_threshold{0.15};

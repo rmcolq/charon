@@ -137,6 +137,28 @@ std::vector<uint64_t> compute_read_hashes(const record_type& record,
  * @param record Original sequence record (for output)
  * @param is_dehost Flag indicating if this is dehost mode (affects result handling)
  */
+/**
+ * @brief Move reads from a file iterator into `records` until the chunk is full.
+ *
+ * A chunk is full at `max_reads` reads or once `max_bases` bases have been collected, whichever
+ * comes first (a chunk always holds at least one read, however long). Limiting by bases keeps
+ * memory flat whatever the read length.
+ * @return the number of bases collected
+ */
+template<typename iterator_type, typename sentinel_type, typename record_type>
+uint64_t fill_chunk(iterator_type &it, const sentinel_type &end, std::vector<record_type> &records,
+                    const size_t max_reads, const uint64_t max_bases) {
+    records.clear();
+    uint64_t bases = 0;
+    while (it != end && records.size() < max_reads && (records.empty() || max_bases == 0 || bases < max_bases)) {
+        auto &record = *it;
+        bases += std::ranges::size(record.sequence());
+        records.push_back(std::move(record));
+        ++it;
+    }
+    return bases;
+}
+
 template<typename record_type, typename result_type, typename agent_type>
 void process_single_read(const std::string& read_id,
                         uint32_t read_length,

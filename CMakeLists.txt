@@ -131,6 +131,21 @@ target_link_libraries(test_utils
 
 add_test(NAME test_utils COMMAND test_utils)
 
+# Test MemoryManager
+add_executable(test_memory_manager
+    test/test_memory_manager.cpp
+)
+target_include_directories(test_memory_manager
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+)
+target_link_libraries(test_memory_manager
+    PRIVATE
+        plog::plog
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_memory_manager COMMAND test_memory_manager)
+
 # Test InputSummary
 add_executable(test_input_summary
     test/test_input_summary.cpp
