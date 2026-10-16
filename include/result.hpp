@@ -11,6 +11,7 @@
 #include <utility>
 #include <plog/Log.h>
 
+#include "memory_manager.hpp"
 #include "read_entry.hpp"
 #include "dehost_arguments.hpp"
 #include "input_summary.hpp"
@@ -40,6 +41,8 @@ private:
     ResultSummary result_summary_;
     StatsModel stats_model_;
     std::vector<ReadRecord<record_type>> cached_reads_;
+    size_t cache_bytes_{0};        // estimated bytes held in cached_reads_
+    size_t cache_byte_budget_{0};  // 0 = unlimited
 
     bool run_extract_;
     ankerl::unordered_dense::map<uint8_t, std::vector<seqan3::sequence_file_output<outfile_field_ids, outfile_format>>> extract_handles_;
@@ -60,6 +63,7 @@ public:
     Result(const ClassifyArguments &opt, const InputSummary &summary) :
             input_summary_{summary},
             result_summary_(summary.num_categories()),
+            cache_byte_budget_(opt.cache_byte_budget),
             run_extract_(opt.run_extract) {
         result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
         stats_model_ = StatsModel(opt, summary);
@@ -77,6 +81,7 @@ public:
     Result(const DehostArguments &opt, const InputSummary &summary) :
             input_summary_{summary},
             result_summary_(summary.num_categories()),
+            cache_byte_budget_(opt.cache_byte_budget),
             run_extract_(opt.run_extract) {
         result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
         stats_model_ = StatsModel(opt, summary);
@@ -141,8 +146,10 @@ public:
 #pragma omp critical(add_to_cache)
             {
                 bool training_complete = false;
-                if (cached_reads_.size() < cached_reads_.capacity()) {
-                    cached_reads_.emplace_back(ReadRecord(false, read_entry, record, record));
+                if (cache_has_room()) {
+                    cache_bytes_ += MemoryManager::cached_read_bytes(read_entry.length(), read_entry.read_id().size(),
+                                                                     input_summary_.num_categories(), read_entry.num_hashes());
+                    cached_reads_.emplace_back(ReadRecord(false, read_entry, record, record_type{}));
                     training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
                 } else {
                     stats_model_.force_ready();
@@ -167,7 +174,9 @@ public:
 #pragma omp critical(add_to_cache)
             {
                 bool training_complete = false;
-                if (cached_reads_.size() < cached_reads_.capacity()) {
+                if (cache_has_room()) {
+                    cache_bytes_ += MemoryManager::cached_read_bytes(read_entry.length(), read_entry.read_id().size(),
+                                                                     input_summary_.num_categories(), read_entry.num_hashes(), true);
                     cached_reads_.emplace_back(ReadRecord(true, read_entry, record, record2));
                     training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
                 } else {
@@ -181,10 +190,18 @@ public:
         }
     }
 
+    // Reads are cached while the model is fitted. Stop caching (forcing the model to be used as it
+    // is) at either the read-count capacity or the byte budget, whichever comes first.
+    [[nodiscard]] bool cache_has_room() const {
+        if (cached_reads_.size() >= cached_reads_.capacity())
+            return false;
+        return cache_byte_budget_ == 0 || cache_bytes_ < cache_byte_budget_;
+    }
+
     void classify_cache(const bool dehost = false) {
         PLOG_VERBOSE << "Classify cached reads";
 
-        for (auto read_record: cached_reads_) {
+        for (auto &read_record: cached_reads_) {
             auto &read_entry = read_record.read;
             const auto &record = read_record.record;
             auto category_index = classify_read(read_entry, dehost);
@@ -197,7 +214,9 @@ public:
                 }
             }
         }
-        cached_reads_.resize(0);
+        cached_reads_.clear();
+        cached_reads_.shrink_to_fit();
+        cache_bytes_ = 0;
     }
 
     void complete(const bool dehost = false) {

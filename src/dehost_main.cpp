@@ -317,10 +317,15 @@ void setup_dehost_subcommand(CLI::App &app) {
             "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
 
     // Set the function that will be called when this subcommand is issued.
-    dehost_subcommand->callback([opt]() { dehost_main(*opt); });
+    dehost_subcommand->callback([opt]() {
+        // A failed run (e.g. the index does not fit in memory) must give a non-zero exit status
+        const int status = dehost_main(*opt);
+        if (status != 0)
+            throw CLI::RuntimeError(status);
+    });
 }
 
-void dehost_reads(const DehostArguments &opt, const Index &index) {
+void dehost_reads(const DehostArguments &opt, const Index &index, MemoryManager &mem_mgr) {
     PLOG_INFO << "Dehosting file " << opt.read_file;
 
     // Pre-compute hash parameters for better cache locality
@@ -348,11 +353,10 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     uint64_t total_reads_processed = 0;
     
     try {
-        for (auto &&chunk: fin | seqan3::views::chunk(opt.chunk_size)) {
-            records.clear();
-            for (auto &record: chunk) {
-                records.push_back(std::move(record));
-            }
+        auto it = fin.begin();
+        uint64_t chunk_bases = opt.chunk_base_budget;
+        while (it != fin.end()) {
+            fill_chunk(it, fin.end(), records, opt.chunk_size, chunk_bases);
 
             // Use optimized batch processing with thread-local agents
             process_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(index)>(
@@ -366,6 +370,11 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
                 true,  // is_dehost = true for dehost
                 total_reads_processed
             );
+
+            if (!mem_mgr.within_limit()) {
+                chunk_bases = std::max<uint64_t>(chunk_bases / 2, 1000000);
+                PLOG_WARNING << "Memory use is close to the limit, reducing chunk size to " << chunk_bases / 1000000 << " Mbases";
+            }
         }
     } catch (const seqan3::unexpected_end_of_input& e) {
         PLOG_WARNING << "File appears truncated or corrupted: " << e.what();
@@ -378,10 +387,11 @@ void dehost_reads(const DehostArguments &opt, const Index &index) {
     
     result.complete(true);
     result.print_summary();
+    PLOG_INFO << "Peak resident memory: " << MemoryManager::format_size(std::max(mem_mgr.peak_rss(), MemoryManager::current_rss()));
 }
 
 
-void dehost_paired_reads(const DehostArguments &opt, const Index &index) {
+void dehost_paired_reads(const DehostArguments &opt, const Index &index, MemoryManager &mem_mgr) {
     PLOG_INFO << "Dehosting files " << opt.read_file << " and " << opt.read_file2;
 
     // Pre-compute hash parameters
@@ -412,17 +422,13 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index) {
     uint64_t total_reads_processed = 0;
     
     try {
-        for (auto &&chunk: fin1 | seqan3::views::chunk(opt.chunk_size)) {
-            records1.clear();
-            records2.clear();
-            for (auto &record: chunk) {
-                records1.push_back(std::move(record));
-            }
-
+        auto it1 = fin1.begin();
+        auto it2 = fin2.begin();
+        uint64_t chunk_bases = opt.chunk_base_budget;
+        while (it1 != fin1.end()) {
+            fill_chunk(it1, fin1.end(), records1, opt.chunk_size, chunk_bases);
             // Get corresponding reads from second file
-            for (auto &record2: fin2 | std::views::take(opt.chunk_size)) {
-                records2.push_back(std::move(record2));
-            }
+            fill_chunk(it2, fin2.end(), records2, records1.size(), 0);
 
             // Use optimized batch processing for paired reads with thread-local agents
             process_paired_read_batch<record_type, decltype(result), decltype(hash_adaptor), decltype(index)>(
@@ -435,6 +441,11 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index) {
                 opt.threads,
                 total_reads_processed
             );
+
+            if (!mem_mgr.within_limit()) {
+                chunk_bases = std::max<uint64_t>(chunk_bases / 2, 1000000);
+                PLOG_WARNING << "Memory use is close to the limit, reducing chunk size to " << chunk_bases / 1000000 << " Mbases";
+            }
         }
     } catch (const seqan3::unexpected_end_of_input& e) {
         PLOG_WARNING << "Paired file appears truncated or corrupted: " << e.what();
@@ -447,6 +458,7 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index) {
     
     result.complete(true);
     result.print_summary();
+    PLOG_INFO << "Peak resident memory: " << MemoryManager::format_size(std::max(mem_mgr.peak_rss(), MemoryManager::current_rss()));
 }
 
 
@@ -468,39 +480,26 @@ int dehost_main(DehostArguments &opt) {
         opt.min_length = 80;
     }
 
-    // Initialize memory manager and validate configuration
-    MemoryManager mem_mgr(opt.max_memory_gb > 0 ? opt.max_memory_gb * 1024 : 0);
-    
-    // Calculate optimal chunk size if not explicitly set by user
-    if (opt.chunk_size == 0) {
-        // User didn't override chunk_size (0 is the default), calculate optimal
-        opt.chunk_size = static_cast<uint16_t>(
-            mem_mgr.calculate_optimal_chunk_size(opt.threads)
-        );
-        PLOG_INFO << "Auto-calculated chunk size: " << opt.chunk_size 
-                 << " (based on " << (opt.max_memory_gb > 0 ? opt.max_memory_gb : 75) 
-                 << "% system memory limit)";
-    }
-    
-    // Validate configuration safety
-    if (!mem_mgr.is_configuration_safe(opt.chunk_size, opt.threads)) {
-        PLOG_WARNING << "Configuration may exceed memory limits!";
-        PLOG_WARNING << "Consider reducing --chunk-size or --threads";
-    }
-    
-    // Display memory usage report
-    PLOG_INFO << mem_mgr.get_memory_report(opt.chunk_size, opt.threads);
+    MemoryManager mem_mgr(opt.max_memory_gb > 0 ? static_cast<size_t>(opt.max_memory_gb) * 1024 : 0);
+    auto args = opt.to_string();
+    PLOG_INFO << "Running charon dehost\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
+
+    // Refuse a run that cannot fit before spending time loading the index
+    if (!plan_memory_before_index(mem_mgr, opt))
+        return 1;
+
+    // Measure what the index actually costs, rather than assuming
+    const auto rss_before_index = MemoryManager::current_rss();
+    auto index = Index();
+    load_index(index, opt.db);
+    const auto rss_after_index = MemoryManager::current_rss();
+    if (!plan_memory_after_index(mem_mgr, opt, rss_after_index > rss_before_index ? rss_after_index - rss_before_index : 0))
+        return 1;
 
     if (opt.num_reads_to_fit < opt.chunk_size) {
         PLOG_WARNING << "num_reads_to_fit is less than chunk_size, adjusting to chunk_size to reduce random-effects in model fitting.";
         opt.num_reads_to_fit = opt.chunk_size;
     }
-    
-    auto args = opt.to_string();
-    PLOG_INFO << "Running charon dehost\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
-
-    auto index = Index();
-    load_index(index, opt.db);
     auto host_index = index.get_host_index();
     PLOG_INFO << "Found host at index " << +host_index << " in the index categories";
 
@@ -543,9 +542,9 @@ int dehost_main(DehostArguments &opt) {
 
 
     if (opt.is_paired)
-        dehost_paired_reads(opt, index);
+        dehost_paired_reads(opt, index, mem_mgr);
     else
-        dehost_reads(opt, index);
+        dehost_reads(opt, index, mem_mgr);
 
     return 0;
 }

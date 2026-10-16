@@ -85,6 +85,14 @@ public:
         return confidence_score_;
     }
 
+    [[nodiscard]] uint32_t num_hashes() const {
+        return num_hashes_;
+    }
+
+    [[nodiscard]] uint32_t length() const {
+        return length_;
+    }
+
     void update_entry(const auto &entry) {
         // this "entry" is a bitvector with a 1 or 0 for each bin in the ibf
         bits_.emplace_back(entry);
@@ -137,6 +145,11 @@ public:
             }
         }
         PLOG_DEBUG << "Found unique counts " << unique_counts_;
+
+        // The per-hash, per-bin bit vectors are only needed to derive the counts above. They are by far
+        // the largest part of an entry (one heap-allocated vector per hash), and entries are kept in
+        // memory while the model is fitted, so release them now.
+        decltype(bits_)().swap(bits_);
     };
 
     void get_proportions() {
