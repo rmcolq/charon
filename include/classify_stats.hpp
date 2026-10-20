@@ -533,7 +533,30 @@ public:
         }
     }
 
+    // With a single (host) category there is no other category to provide negative examples, so reads with a
+    // host proportion above the threshold are positive and reads with a lower, non-zero proportion are negative.
+    bool add_read_to_single_category_training_data(const float &val) {
+        const uint8_t i = 0;
+        if (val > lo_hi_threshold_) {
+            auto ready_to_train = training_data_.at(i).add_pos(val);
+            if (ready_to_train and not models_[i].ready) {
+#pragma omp critical(train_model)
+                train_model_at(i);
+            }
+        } else {
+            auto ready_to_train = training_data_.at(i).add_neg(val);
+            if (ready_to_train and not models_[i].ready) {
+#pragma omp critical(train_model)
+                train_model_at(i);
+            }
+        }
+        return ready_;
+    }
+
     bool add_read_to_training_data(const std::vector<float> &read_proportions) {
+        if (read_proportions.size() == 1)
+            return add_read_to_single_category_training_data(read_proportions.front());
+
         auto pos_i = std::numeric_limits<uint8_t>::max();
         auto max_val = 0.0;
         auto num_above_threshold = 0;

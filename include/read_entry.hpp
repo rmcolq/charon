@@ -283,6 +283,46 @@ public:
             call_ = other_index;
     }
 
+    // Host-only index (a single host category, no microbial category). There is nothing to compare the host against,
+    // so the read is called host when the model supports it being from the host distribution rather than the
+    // negative one; every other read is left uncalled, i.e. it is not host. This is the host-only analogue of the
+    // first branch of call_host, with the missing category having no unique hits and probability 1 - host_prob.
+    void call_host_only(const StatsModel &stats_model, const uint8_t host_index) {
+        assert(probabilities_.size() == 1);
+
+        const double host_unique_prop = unique_proportions_.at(host_index);
+        const double host_prob = probabilities_.at(host_index);
+        const double other_prob = 1 - host_prob;
+
+        const auto raw_confidence = unique_counts_.at(host_index);
+        if (raw_confidence > std::numeric_limits<uint8_t>::max())
+            confidence_score_ = std::numeric_limits<uint8_t>::max();
+        else
+            confidence_score_ = static_cast<uint8_t>(raw_confidence);
+        if (confidence_score_ < stats_model.confidence_threshold()) {
+            return;
+        }
+
+        if (mean_quality_ < stats_model.min_quality()) {
+            return;
+        }
+
+        if (length_ < stats_model.min_length()) {
+            return;
+        }
+
+        if (compression_ < stats_model.min_compression()) {
+            return;
+        }
+
+        if (host_unique_prop > stats_model.min_proportion_difference()
+            and host_prob > other_prob
+            and host_prob - other_prob > stats_model.min_prob_difference()
+            and std::max(host_prob * confidence_score_, static_cast<double>(confidence_score_)) >=
+                stats_model.confidence_probability_threshold())
+            call_ = host_index;
+    }
+
     void apply_model(const StatsModel &stats_model) {
         for (auto i = 0; i < unique_proportions_.size(); ++i) {
             const auto &read_proportion = unique_proportions_.at(i);
@@ -302,7 +342,10 @@ public:
     void dehost(const StatsModel &stats_model, const uint8_t host_index) {
         PLOG_DEBUG << "Classify read " << read_id_;
         apply_model(stats_model);
-        call_host(stats_model, host_index);
+        if (probabilities_.size() == 1)
+            call_host_only(stats_model, host_index);
+        else
+            call_host(stats_model, host_index);
     }
 
     void print_result(const InputSummary &summary) {

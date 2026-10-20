@@ -66,6 +66,20 @@ Additionally extract the microbial fraction of the input dataset
 charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz> --extract microbial --prefix <prefix>
 ```
 
+#### Host-only index
+
+An index with only the host category (a single `human` or `host` category in the tab file) can also be used with `dehost`.
+There is no microbial category to compare against, so each read is called host or not host: a read is called host when the
+model supports it coming from the host distribution, and every other read is left uncalled (`U`). This is the closest
+equivalent to other host depletion tools, which also only look for the host, and is intended for evaluating how much the
+microbial category adds.
+
+```
+charon dehost -t 8 --db <host_only.tab.idx> <reads.fq.gz> --extract all --prefix <prefix>
+```
+
+Reads which are not called host are extracted as `<prefix>_non_host`. `classify` still needs at least two categories.
+
 ## Installation
 
 ### Docker image
@@ -137,7 +151,7 @@ Outputs:
 
 The probability score is the relative probability of seeing the number of unique hits against this category if the read is truly from the positive distribution, rather than the negative distribution.
 
-If `extract_file` and `--prefix` specified, will output a file with a subset of input reads belonging to the names index category. Specifying `--extract all` will generate a file for both host and microbial reads (excludes unclassified).
+If `extract_file` and `--prefix` specified, will output a file with a subset of input reads belonging to the names index category. Specifying `--extract all` will generate a file for both host and microbial reads (excludes unclassified, except for a host-only index where the reads which are not host are written as `non_host`).
 
 ---
 
