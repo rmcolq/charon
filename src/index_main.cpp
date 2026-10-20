@@ -64,6 +64,46 @@ void setup_index_subcommand(CLI::App &app) {
     index_subcommand->add_flag(
             "--optimize", opt->optimize, "Compress the number of bins for improved classification run time");
 
+    index_subcommand->add_option("--fpr", opt->max_fpr, "Target false positive rate per bin.")
+            ->type_name("FLOAT")
+            ->check(CLI::Range(0.0001, 0.5))
+            ->capture_default_str();
+
+    index_subcommand->add_option("--num-hash", opt->num_hash, "Number of hash functions in the IBF.")
+            ->type_name("INT")
+            ->check(CLI::Range(1, 5))
+            ->capture_default_str();
+
+    index_subcommand->add_flag(
+            "--balance", opt->balance,
+            "Balance the IBF: pack small bins of a category together and split large bins into technical bins.")
+            ->excludes("--optimize");
+
+    index_subcommand->add_option("--bin-capacity", opt->bin_capacity,
+                                 "Minimisers per technical bin with --balance (default: total / --technical-bins).")
+            ->type_name("INT");
+
+    index_subcommand->add_option("--technical-bins", opt->technical_bins,
+                                 "Approximate number of technical bins with --balance when --bin-capacity is not set.")
+            ->type_name("INT")
+            ->check(CLI::Range(1, 4096))
+            ->capture_default_str();
+
+    index_subcommand->add_option("--merge-categories", opt->merge_categories,
+                                 "With --balance: put all bins of these categories into a single scoring group "
+                                 "(split into technical bins as needed).")
+            ->type_name("STRING ...");
+
+    index_subcommand->add_option("--category-fpr", opt->category_fpr_args,
+                                 "With --balance: target fpr for the bins of a category, e.g. human=0.002. Its bins are "
+                                 "split into more, less loaded technical bins (scoring takes the best bin per category, "
+                                 "so the host category's false positives are amplified across its bins).")
+            ->type_name("CATEGORY=FPR ...");
+
+    index_subcommand->add_flag(
+            "--stats-only", opt->stats_only,
+            "Count distinct minimisers per file and write <prefix>.stats.tsv without building the index.");
+
     index_subcommand->add_flag(
             "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
 
@@ -151,7 +191,8 @@ InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary 
             {
                 stats.records_per_bin[bin] += record_count;
                 stats.num_files += 1;
-                store_hashes(std::to_string(bin), hashes, opt.tmp_dir);
+                if (not opt.stats_only)
+                    store_hashes(std::to_string(bin), hashes, opt.tmp_dir);
                 stats.hashes_per_bin[bin] += hashes.size();
                 PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size()
                           << " hashes to bin " << +bin;
@@ -247,6 +288,29 @@ optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &st
     return bucket_to_bins_map;
 }
 
+void write_stats(const IndexArguments &opt, const InputSummary &summary, const InputStats &stats) {
+    const auto stats_file = opt.prefix.substr(0, opt.prefix.size() - 4) + ".stats.tsv";  // strip ".idx"
+    std::ofstream out{stats_file};
+    out << "file\tcategory\tbin\trecords\tminimisers\n";
+    uint64_t total = 0;
+    for (const auto &[path, bin]: summary.filepath_to_bin) {
+        const auto hashes = stats.hashes_per_bin.contains(bin) ? stats.hashes_per_bin.at(bin) : 0;
+        const auto records = stats.records_per_bin.contains(bin) ? stats.records_per_bin.at(bin) : 0;
+        out << path << "\t" << summary.bin_to_category.at(bin) << "\t" << +bin << "\t" << records << "\t" << hashes << "\n";
+        total += hashes;
+    }
+    const auto max_hashes = stats.max_num_hashes();
+    // Bloom filter bits per element for the target fpr (uncapped, unlike bin_size_in_bits)
+    const double bits_per_element = -static_cast<double>(opt.num_hash) /
+                                    std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash));
+    const double current_gb = bits_per_element * static_cast<double>(max_hashes) * summary.num_bins / 8e9;
+    const double balanced_gb = bits_per_element * static_cast<double>(total) / 8e9;
+    PLOG_INFO << "Wrote " << stats_file << ": " << +summary.num_bins << " bins, " << total
+              << " minimisers in total, largest bin " << max_hashes;
+    PLOG_INFO << "Uncompressed IBF size at fpr " << opt.max_fpr << " with " << +opt.num_hash
+              << " hashes: current layout " << current_gb << " GB, perfectly balanced " << balanced_gb << " GB";
+}
+
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
                   const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map) {
     const auto max_num_hashes = stats.max_num_hashes();
@@ -278,7 +342,134 @@ Index build_index(const IndexArguments &opt, const InputSummary &summary, InputS
     }
 
 
-    return Index(opt, summary, stats, ibf);
+    return Index(opt, summary, stats, std::move(ibf));
+}
+
+std::pair<ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>>, Layout>
+balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats) {
+    uint64_t total = 0;
+    for (const auto &[bin, num_hashes]: stats.hashes_per_bin)
+        total += num_hashes;
+    const uint64_t capacity = opt.bin_capacity > 0 ? opt.bin_capacity
+                                                   : std::max<uint64_t>(1, (total + opt.technical_bins - 1) / opt.technical_bins);
+    PLOG_INFO << "Balance index layout with capacity " << capacity << " minimisers per technical bin";
+
+    // A category with a lower target fpr gets a smaller capacity per technical bin: technical bins all have
+    // the height needed for `capacity` at opt.max_fpr, so loading them less lowers their fpr.
+    const double bin_bits = static_cast<double>(capacity) * -static_cast<double>(opt.num_hash) /
+                            std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash));
+    auto capacity_for = [&](const std::string &category) -> uint64_t {
+        const auto it = opt.category_fpr.find(category);
+        if (it == opt.category_fpr.end() or it->second >= opt.max_fpr)
+            return capacity;
+        const double per_element = -static_cast<double>(opt.num_hash) /
+                                   std::log(1 - std::exp(std::log(it->second) / opt.num_hash));
+        return std::max<uint64_t>(1, static_cast<uint64_t>(bin_bits / per_element));
+    };
+    for (const auto &[category, fpr]: opt.category_fpr)
+        PLOG_INFO << "Category " << category << " uses fpr " << fpr << ": capacity " << capacity_for(category)
+                  << " minimisers per technical bin";
+
+    // Pack bins smaller than the capacity together within each category (first fit decreasing);
+    // larger bins keep a group of their own and are split into parts below.
+    auto sorted_pairs = stats.bins_by_size();
+    std::reverse(sorted_pairs.begin(), sorted_pairs.end());
+    std::vector<uint64_t> group_load;
+    std::vector<std::string> group_category;
+    ankerl::unordered_dense::map<uint8_t, uint8_t> bin_to_group;
+    ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> group_to_bins;
+    for (const auto &[bin, num_hashes]: sorted_pairs) {
+        const auto &category = summary.bin_to_category.at(bin);
+        const auto category_capacity = capacity_for(category);
+        size_t group = group_load.size();
+        const bool merge_all = std::find(opt.merge_categories.begin(), opt.merge_categories.end(), category) !=
+                               opt.merge_categories.end();
+        if (merge_all) {
+            const auto it = std::find(group_category.begin(), group_category.end(), category);
+            if (it != group_category.end())
+                group = static_cast<size_t>(it - group_category.begin());
+        } else if (num_hashes < category_capacity) {
+            for (size_t g = 0; g < group_load.size(); ++g) {
+                if (group_category[g] == category and group_load[g] + num_hashes <= category_capacity) {
+                    group = g;
+                    break;
+                }
+            }
+        }
+        if (group == group_load.size()) {
+            group_load.push_back(0);
+            group_category.push_back(category);
+        }
+        group_load[group] += num_hashes;
+        bin_to_group[bin] = static_cast<uint8_t>(group);
+        group_to_bins[static_cast<uint8_t>(group)].push_back(bin);
+    }
+
+    Layout layout;
+    for (size_t group = 0; group < group_load.size(); ++group) {
+        const auto group_capacity = capacity_for(group_category[group]);
+        const auto parts = std::max<uint64_t>(1, (group_load[group] + group_capacity - 1) / group_capacity);
+        layout.first_bin.push_back(static_cast<uint16_t>(layout.num_technical_bins));
+        layout.num_parts.push_back(static_cast<uint16_t>(parts));
+        layout.num_technical_bins += static_cast<uint32_t>(parts);
+        PLOG_DEBUG << "Group " << group << " (" << group_category[group] << ") has " << group_to_bins[group].size()
+                   << " bins, " << group_load[group] << " minimisers and " << parts << " parts";
+    }
+    layout.finalise();
+    PLOG_INFO << "Balanced " << +summary.num_bins << " bins into " << group_load.size() << " scoring groups and "
+              << layout.num_technical_bins << " technical bins";
+
+    // Groups become the bins of the summary/stats used for scoring.
+    InputSummary new_summary;
+    InputStats new_stats;
+    new_stats.num_files = stats.num_files;
+    new_summary.num_bins = static_cast<uint8_t>(group_load.size());
+    new_summary.categories = summary.categories;
+    for (const auto &[filepath, bin]: summary.filepath_to_bin) {
+        const auto group = bin_to_group.at(bin);
+        new_summary.filepath_to_bin.emplace_back(filepath, group);
+        new_summary.bin_to_category[group] = summary.bin_to_category.at(bin);
+        new_stats.records_per_bin[group] += stats.records_per_bin.at(bin);
+    }
+    for (size_t group = 0; group < group_load.size(); ++group)
+        new_stats.hashes_per_bin[static_cast<uint8_t>(group)] = group_load[group];
+    summary = new_summary;
+    stats = new_stats;
+    return {group_to_bins, layout};
+}
+
+Index build_balanced_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
+                           const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &group_to_bins_map,
+                           const Layout &layout) {
+    // Exact load of every technical bin (merged groups may share minimisers, so this is an upper bound for them)
+    std::vector<uint64_t> technical_bin_load(layout.num_technical_bins, 0);
+#pragma omp parallel for num_threads(opt.threads) schedule(dynamic)
+    for (size_t group = 0; group < layout.num_groups(); ++group) {
+        for (auto const &bin: group_to_bins_map.at(static_cast<uint8_t>(group))) {
+            const auto hashes = load_hashes(std::to_string(bin), opt.tmp_dir);
+            for (const auto value: hashes)
+                technical_bin_load[layout.technical_bin(group, value)] += 1;  // each group owns its own technical bins
+        }
+    }
+    const auto max_load = *std::max_element(technical_bin_load.begin(), technical_bin_load.end());
+    const auto num_bits = bin_size_in_bits(opt, max_load);
+    PLOG_INFO << "Create new IBF with " << layout.num_technical_bins << " technical bins of " << num_bits
+              << " bits (largest technical bin holds " << max_load << " minimisers)";
+    seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{layout.num_technical_bins},
+                                         seqan3::bin_size{num_bits},
+                                         seqan3::hash_function_count{opt.num_hash}};
+
+    for (size_t group = 0; group < layout.num_groups(); ++group) {
+        const auto &bins = group_to_bins_map.at(static_cast<uint8_t>(group));
+        for (auto const &bin: bins) {
+            const auto hashes = load_hashes(std::to_string(bin), opt.tmp_dir);
+            for (const auto value: hashes)
+                ibf.emplace(value, seqan3::bin_index{layout.technical_bin(group, value)});
+            PLOG_DEBUG << "Added " << hashes.size() << " hashes from bin " << +bin << " to group " << group;
+        }
+        delete_hashes(bins, opt.tmp_dir);
+    }
+    return Index(opt, summary, stats, std::move(ibf), layout);
 }
 
 int index_main(IndexArguments &opt) {
@@ -289,6 +480,13 @@ int index_main(IndexArguments &opt) {
         log_level = plog::verbose;
     }
     plog::init(log_level, opt.log_file.c_str(), 1000000, 5);
+
+    for (const auto &arg: opt.category_fpr_args) {
+        const auto parts = split(arg, "=");
+        if (not parts.has_value() or parts->size() != 2)
+            throw std::invalid_argument("--category-fpr expects CATEGORY=FPR, got " + arg);
+        opt.category_fpr[parts->at(0)] = std::stod(parts->at(1));
+    }
 
     if (opt.window_size < opt.kmer_size) {
         throw std::logic_error("W must be greater than K");
@@ -307,7 +505,8 @@ int index_main(IndexArguments &opt) {
     if (opt.tmp_dir == "") {
         opt.tmp_dir = opt.input_file + ".tmp_idx";
     }
-    std::filesystem::create_directory(opt.tmp_dir);
+    if (not opt.stats_only)
+        std::filesystem::create_directory(opt.tmp_dir);
 
     auto args = opt.to_string();
     LOG_INFO << "Running charon index\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
@@ -315,6 +514,16 @@ int index_main(IndexArguments &opt) {
 
     auto summary = parse_input_file(opt.input_file);
     auto stats = count_and_store_hashes(opt, summary);
+    if (opt.stats_only) {
+        write_stats(opt, summary, stats);
+        return 0;
+    }
+    if (opt.balance) {
+        auto [group_to_bins_map, layout] = balance_layout(opt, summary, stats);
+        store_index(opt.prefix, build_balanced_index(opt, summary, stats, group_to_bins_map, layout));
+        return 0;
+    }
+
     auto bucket_to_bins_map = optimize_layout(opt, summary, stats);
     auto index = build_index(opt, summary, stats, bucket_to_bins_map);
 

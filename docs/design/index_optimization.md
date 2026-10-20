@@ -464,6 +464,66 @@ with `--min_length 50`):
   are classified serially. Follow-up: classify the cache in parallel, and cap the cache by
   bytes rather than reads.
 
+**E4 minimisers per (w, k)** (`charon index --stats-only`, small index; sizes are uncompressed IBF at
+FPR 0.01, h 3; per-category totals in `evaluation/stats/*.stats.tsv`):
+
+| w, k | minimisers | largest bin | current layout | perfectly balanced | balanced, FPR 0.05 |
+|---|---|---|---|---|---|
+| 61, 19 | 0.47 G | 17 M | 1.7 GB | 0.73 GB | 0.39 GB |
+| 51, 19 | 0.62 G | 23 M | 2.2 GB | 0.95 GB | 0.50 GB |
+| 41, 19 | 0.89 G | 32 M | 3.2 GB | 1.37 GB | 0.73 GB |
+| 31, 19 | 1.48 G | 54 M | 5.3 GB | 2.29 GB | 1.21 GB |
+| 27, 19 | 2.05 G | 74 M | 7.3 GB | 3.17 GB | 1.68 GB |
+| 31, 25 | 2.75 G | 97 M | 9.5 GB | 4.26 GB | 2.25 GB |
+| 25, 21 | 3.26 G | 118 M | 11.7 GB | 5.03 GB | 2.66 GB |
+| 23, 19 | 3.36 G | 122 M | 12.0 GB | 5.19 GB | 2.74 GB |
+
+The density model (§5.3) predicts these to within about 5 %. Bins are about 43 % full at every setting. A larger k barely changes the
+count for the same w − k. Every Illumina candidate fits the 16 GB small-release budget once balanced.
+
+**E6 index representation and layout** (w41/k19, FPR 0.01; two alternating repeats, results identical across repeats):
+
+| index | technical bins | IBF in RAM (file) | build | ONT wall / RAM | Illumina wall / RAM |
+|---|---|---|---|---|---|
+| original, compressed (v3) | 64 | 2.0 GB | 12.6 min | 32–33 s / 4.4 GB | 17 s / 2.1 GB |
+| E6a uncompressed (v4), same bins | 64 | 3.2 GB | 2.9 min | **25 s** / 4.7 GB | 16 s / 3.1 GB |
+| E6b `--balance` | 287 | 1.53 GB (1.71) | 2.6 min | 29 s / 4.1 GB | 16 s / **1.7 GB** |
+| E6d `--balance --category-fpr human=0.0005` | 413 | 2.21 GB (2.40) | 2.6 min | 30 s / 4.6 GB | 16 s / 2.3 GB |
+
+| accuracy | uncompressed | balanced | + merge human | + human FPR 0.002 | **+ human FPR 0.0005** |
+|---|---|---|---|---|---|
+| ONT mtb / zymo | 96.78 / 99.61 | 96.05 / 99.40 | 96.02 / 98.26 | 96.78 / 99.63 | 96.84 / 99.63 |
+| ONT microbial → host | 0 | 0 | **0.13 %** | 0 | 0 |
+| Illumina human → host | 95.87 | 95.77 | 96.67 | 95.75 | 95.74 |
+| Illumina mtb / zymo | 50.88 / 96.75 | **38.44 / 94.34** | 51.77 / 95.80 | 47.99 / 95.73 | 51.43 / 96.92 |
+| human → microbial (both) | 0 / 0.002 % | 0 / 0.001 % | 0 / 0.002 % | 0 / 0.002 % | 0 / 0.002 % |
+
+Findings:
+
+- **Uncompressed = compressed, faster.** Identical results. ONT is 23 % faster, the build is 4× faster (no sd_vector
+  compression), and the file is larger. New indexes are written in the v4 format (magic header, layout,
+  uncompressed IBF). v3 indexes still load and are queried compressed, so existing large indexes keep their RAM footprint.
+- **Plain balancing hurts microbial recall, and the cause is host false positives amplified by best-bin scoring.**
+  Microbial reads' best human bin is the max over 24 chromosome groups. In the unbalanced layout those
+  bins were nearly empty (effective FPR about 0.2 % for chr1, much lower for small chromosomes), so this noise was
+  absent. Balanced to 1 %, a 10-minimiser mtb Illumina pair almost always gets a stray human hit (false human
+  hits per mtb pair 1.7 % → 9.3 %).
+- **Merging human into one group** removes the max-over-groups noise but reintroduces the union effect of E2
+  for long ONT microbial reads (0.13 % called host). So it's rejected.
+- **Per-category FPR fixes it:** `--category-fpr human=0.0005` splits human groups into lightly loaded technical
+  bins (same IBF height), restoring the old behaviour at **31 % less RAM** than the original layout (2.21 vs 3.2 GB).
+  The host category is only 26 % of minimisers, so its low FPR is cheap. Equivalent future direction: a separate
+  host IBF (L3) at low FPR.
+- **Speed:** balanced lookups cost about 20 % more CPU for ONT at 8 threads (rows of 287–413 bins = 5–7 words to AND
+  vs 1). Visiting only the technical bins that were hit when mapping back to groups made no difference (identical output, same
+  time). Wall time on both datasets is now dominated by the serial classification of cached training reads
+  (see E0fix), so lookup-speed differences are partly hidden until that is fixed.
+- **Build peak RAM** for the uncompressed path was 9.5 GB because the IBF was copied into `Index`. It's now moved.
+
+Next: E5 (FPR sweep) and E7 (Illumina w/k sweep) on balanced indexes with low host FPR. The microbial FPR
+can probably rise (E2/E6 show leak is driven by host-side noise, not microbial-side), and the host FPR
+stays low.
+
 ### Bugs found along the way
 
 | id | where | effect | status |

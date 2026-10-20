@@ -13,6 +13,7 @@
 
 #include <counts.hpp>
 #include <input_summary.hpp>
+#include <layout.hpp>
 #include <classify_stats.hpp>
 
 
@@ -99,6 +100,35 @@ public:
             bits_.reserve((length_ / 8 + 16) * bin_words_);
         }
         bits_.insert(bits_.end(), bitvector.data(), bitvector.data() + bin_words_);
+        num_hashes_ += 1;
+    };
+
+    // As above, but the IBF has a balanced layout: map its technical bins back to one bit per scoring
+    // group (only the part a hash belongs to is consulted for split groups).
+    void update_entry(const auto &entry, const uint64_t hash, const Layout &layout) {
+        if (layout.is_identity()) {
+            update_entry(entry);
+            return;
+        }
+        const uint64_t *words = entry.raw_data().data();
+        if (bin_words_ == 0) {
+            bin_words_ = (layout.num_groups() + 63) / 64;
+            bits_.reserve((length_ / 8 + 16) * bin_words_);
+        }
+        const size_t base = bits_.size();
+        bits_.resize(base + bin_words_, 0);
+        // Only visit technical bins that were hit; a hit counts for its group if it is the part this hash maps to.
+        const size_t technical_words = (layout.num_technical_bins + 63) / 64;
+        for (size_t word = 0; word < technical_words; ++word) {
+            uint64_t remaining = words[word];
+            while (remaining) {
+                const size_t technical_bin = (word << 6) + std::countr_zero(remaining);
+                remaining &= remaining - 1;
+                const size_t group = layout.technical_group[technical_bin];
+                if (layout.technical_part[technical_bin] == Layout::part(hash, layout.num_parts[group]))
+                    bits_[base + (group >> 6)] |= uint64_t{1} << (group & 63);
+            }
+        }
         num_hashes_ += 1;
     };
 

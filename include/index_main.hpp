@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <layout.hpp>
+
 #include <omp.h>
 #include <cstring>
 #include <ankerl/unordered_dense.h>
@@ -30,6 +32,15 @@ optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &st
 
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
                   const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map);
+
+void write_stats(const IndexArguments &opt, const InputSummary &summary, const InputStats &stats);
+
+std::pair<ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>>, Layout>
+balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats);
+
+Index build_balanced_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
+                           const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &group_to_bins_map,
+                           const Layout &layout);
 
 int index_main(IndexArguments &opt);
 

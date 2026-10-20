@@ -343,8 +343,6 @@ void dehost_reads(const DehostArguments &opt, const Index &index, MemoryManager 
     );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
-    auto agent = index.agent();
-    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
@@ -409,8 +407,6 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index, MemoryM
     );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
-    auto agent = index.agent();
-    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<MyTraits> fin1{opt.read_file};
     seqan3::sequence_file_input<MyTraits> fin2{opt.read_file2};

@@ -184,7 +184,7 @@ void process_single_read(const std::string& read_id,
     
     // Add to results (thread-safe critical section)
     auto add = [&]() {
-        if constexpr (requires { result.add_read(read, record, is_dehost); }) {
+        if constexpr (requires { result.add_read(read, record, true); }) {
             result.add_read(read, record, is_dehost);
         } else {
             result.add_read(read, record);
@@ -232,14 +232,16 @@ void process_read_batch(const std::vector<record_type>& records,
     
     // Capture input_summary() BEFORE parallel region to avoid race condition
     const auto& input_summary = result.input_summary();
+    const auto& layout = index.layout();
     
     // Single pass: extract metadata and process immediately
     // Each thread gets its own agent to avoid race conditions
     #pragma omp parallel num_threads(num_threads)
     {
-        // Create thread-local agent - this is CRITICAL for thread safety
-        auto thread_agent = index.agent();
-        
+        // Create thread-local agent - this is CRITICAL for thread safety.
+        // with_agent picks the agent type for the index's IBF layout (compressed or not).
+        index.with_agent([&](auto &thread_agent) {
+        const bool dehost = is_dehost;  // local copy: clang can't capture it through the omp region + nested lambda
         #pragma omp for
         for (auto i = 0; i < records.size(); ++i) {
             try {
@@ -278,7 +280,7 @@ void process_read_batch(const std::vector<record_type>& records,
                 // Process hashes immediately - no storage overhead using thread-local agent
                 for (auto &&value: record.sequence() | hash_adaptor) {
                     const auto &entry = thread_agent.bulk_contains(value);
-                    read.update_entry(entry);
+                    read.update_entry(entry, value, layout);
                 }
                 
                 // Post-process: compute counts, proportions, and probabilities - use captured input_summary
@@ -286,8 +288,8 @@ void process_read_batch(const std::vector<record_type>& records,
                 
                 // Add to results (thread-safe)
                 auto add = [&]() {
-                    if constexpr (requires { result.add_read(read, record, is_dehost); }) {
-                        result.add_read(read, record, is_dehost);
+                    if constexpr (requires { result.add_read(read, record, true); }) {
+                        result.add_read(read, record, dehost);
                     } else {
                         result.add_read(read, record);
                     }
@@ -304,6 +306,7 @@ void process_read_batch(const std::vector<record_type>& records,
                 // Continue processing other reads
             }
         }
+        });
     }
     
     total_reads_processed += records.size();
@@ -343,14 +346,15 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
     
     // Capture input_summary() BEFORE parallel region to avoid race condition
     const auto& input_summary = result.input_summary();
+    const auto& layout = index.layout();
     
     // Single pass: process paired reads in parallel
     // Each thread gets its own agent to avoid race conditions
     #pragma omp parallel num_threads(num_threads)
     {
-        // Create thread-local agent - this is CRITICAL for thread safety
-        auto thread_agent = index.agent();
-        
+        // Create thread-local agent - this is CRITICAL for thread safety.
+        // with_agent picks the agent type for the index's IBF layout (compressed or not).
+        index.with_agent([&](auto &thread_agent) {
         #pragma omp for
         for (auto i = 0; i < records1.size(); ++i) {
             try {
@@ -406,12 +410,12 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                 // Process hashes from both reads immediately using thread-local agent
                 for (auto &&value: record1.sequence() | hash_adaptor) {
                     const auto &entry = thread_agent.bulk_contains(value);
-                    read.update_entry(entry);
+                    read.update_entry(entry, value, layout);
                 }
                 
                 for (auto &&value: record2.sequence() | hash_adaptor) {
                     const auto &entry = thread_agent.bulk_contains(value);
-                    read.update_entry(entry);
+                    read.update_entry(entry, value, layout);
                 }
                 
                 read.post_process(input_summary, result.category_or());
@@ -427,6 +431,7 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                 PLOG_ERROR << "Error processing paired read " << records1[i].id() << ": " << e.what();
             }
         }
+        });
     }
     
     total_reads_processed += records1.size();
