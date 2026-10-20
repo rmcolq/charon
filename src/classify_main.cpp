@@ -245,6 +245,7 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index, Mem
                 result,
                 opt.min_length,
                 opt.threads,
+                false,  // is_dehost = false for classify
                 total_reads_processed
             );
 

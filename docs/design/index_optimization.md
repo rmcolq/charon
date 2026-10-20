@@ -391,25 +391,29 @@ Scripts: `scripts/eval/` (subsample, run + score, compare outputs, offline thres
 
 **E0 baseline**
 
-| | human → host | human → microbial | mtb → microbial | zymo → microbial | wall (8 threads) | peak RAM |
+| | human → host | human → microbial | mtb → microbial | zymo → microbial | wall (8 threads, re-timed) | peak RAM |
 |---|---|---|---|---|---|---|
-| ONT | 88.96 % (10.8 % filtered by `--min_quality 15`) | 0 | 96.78 % | 99.61 % | 184 s | 2.05 GB |
-| Illumina | 95.14 % | 0.001 % | 0 % (all filtered, B5) | 97.73 % | 1,696 s | 1.84 GB |
+| ONT | 88.96 % (10.8 % filtered by `--min_quality 15`) | 0 | 96.78 % | 99.61 % | 40–41 s | 2.05 GB |
+| Illumina | 95.14 % | 0.001 % | 0 % (all filtered, B5) | 97.73 % | 15–20 s | 1.84 GB |
 
 For ONT reads that pass the quality filter, host recall is 99.4–99.9 % in every length stratum.
 
 **E1 read-side performance: per-read output identical to E0 for every read (evidence and calls).**
+Changes: flat per-hash bit storage, drop `max_bits_`, classify outside the `add_read_to_results`
+lock once the model is ready, no flush per line, and format output lines outside the `print_result` lock.
 
-| change | ONT | Illumina |
+Timed back to back, alternating binaries, 2 repeats (laptop has ~2 cores of background load
+from macOS daemons, so load average is 9–12):
+
+| | E0 | E1 |
 |---|---|---|
-| E0 | 184 s | 1,696 s |
-| E1a: flat per-hash bit storage, drop `max_bits_`, classify outside the `add_read_to_results` lock once the model is ready, no flush per line | 121 s | 440 s |
-| E1b: also format output lines outside the `print_result` lock | 98 s | 221 s (repeat: 312 s, 97 s) |
+| ONT 60 k reads | 40–41 s | 37 s |
+| Illumina 300 k pairs (mtb dropped by B5) | 15–20 s | 7 s |
 
-The profile of E0 Illumina showed the main thread waiting on a lock 95 % of the time. Model
-evaluation (KDE `exp`) and printing with `std::endl` were done inside one global critical
-section. Illumina timings vary 3× between near-identical runs, so other load on the laptop
-(e.g. Dropbox syncing) is interfering. Speed comparisons need repeats on an idle machine.
+The first E0/E1 timings (184 s / 1,696 s for E0) were inflated several-fold by other load at
+the time (probably Dropbox syncing the freshly written subsets) and should be ignored. The lock
+contention seen in the E0 profile is real, but mostly hurts when cores are scarce. So E1 is a
+modest gain for ONT and about 2–3× for Illumina. **Speed comparisons must always be run back to back.**
 
 **E2 best-bin vs category-OR scoring (same index):**
 
@@ -441,14 +445,34 @@ At w41, Illumina is a recall-vs-leak trade-off set by the confidence threshold: 
 index, E7) should move the whole curve. Even at w41, `call_host` with conf 5 beats the
 current default on every class except a small rise in leak.
 
+**E0fix: baselines after fixing B1–B4** (fitted model, paired reads use `call_host`; Illumina
+with `--min_length 50`):
+
+| | human → host | human → microbial | mtb → microbial | zymo → microbial | wall | peak RAM |
+|---|---|---|---|---|---|---|
+| ONT | 88.96 % | 0 | 96.78 % | 99.61 % | 47 s | 3.8–4.2 GB |
+| Illumina | 95.87 % | 0.002 % | 50.88 % | 96.75 % | 30 s | 2.1 GB |
+
+- ONT calls are identical to E1 for every read, even though the human model is now fitted from the reads (microbial
+  model: defaults; training didn't complete within 60 k reads).
+- Illumina now matches the offline `call_host` sweep at the defaults (§E3 table) exactly. Only the positive
+  distributions get fitted, because there are never enough "negative" training pairs.
+- **Cost of fitting the model:** reads are cached until training completes (up to
+  `num_reads_to_fit` × categories × 4 = 80 k reads, since `num_reads_to_fit` is raised to the chunk size of
+  10 k). The cache is then classified serially inside the lock. ONT RAM 2.0 → 4.2 GB (cached
+  long reads); Illumina 7 s → 30 s, because training never completes and all 80 k cached pairs
+  are classified serially. Follow-up: classify the cache in parallel, and cap the cache by
+  bytes rather than reads.
+
 ### Bugs found along the way
 
 | id | where | effect | status |
 |---|---|---|---|
-| B1 | `process_paired_read_batch` → `add_paired_read(read, r1, r2)` omits `dehost` | paired-end `dehost` uses `call_category` (classify rule), not `call_host` | open |
-| B2 | `StatsModel` ctors never set `min_hits_` | `call_category`'s min-hits check reads an uninitialised value | open |
-| B3 | `Result` reserves `cached_reads_` only with `--extract` | without `--extract` the model is never fitted, and the default KDE is always used | open |
-| B4 | `Result::add_read`/`add_paired_read`, cache-full branch | the read that triggers `force_ready()` is never classified or output (1 read per run) | open |
+| B1 | `process_paired_read_batch` → `add_paired_read(read, r1, r2)` omits `dehost` | paired-end `dehost` uses `call_category` (classify rule), not `call_host` | **fixed** |
+| B2 | `StatsModel` ctors never set `min_hits_` | `call_category`'s min-hits check reads an uninitialised value | **fixed** (0, which matches observed behaviour) |
+| B3 | `Result` reserves `cached_reads_` only with `--extract` | without `--extract` the model is never fitted, and the default KDE is always used | **fixed**; `complete()` now also trains models that never got enough data (logged) |
+| B4 | `Result::add_read`/`add_paired_read`, cache-full branch | the read that triggers `force_ready()` is never classified or output (1 read per run) | **fixed** |
 | B5 | `dehost_main`: paired mode sets `min_length = 80` unconditionally | `--min_length` ignored for pairs, and 75 bp mates (Hall mtb) are silently dropped | **fixed** (explicit `--min_length` honoured) |
 | B6 | `index_main`: plog rolls over at 1 MB × 5 | long index builds lose early log lines | open |
 | B7 | `ReadEntry::get_counts`: `max_bits_` `resize` then `emplace_back` | doubled vectors (output unused) | **fixed** (removed in E1) |
+| B8 | `test/test_integration.cpp` hard-codes the main checkout's `build/bin/charon` | integration tests in a worktree or other clone test the wrong binary | open |

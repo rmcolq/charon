@@ -327,6 +327,7 @@ void process_read_batch(const std::vector<record_type>& records,
  * @param result Output result container
  * @param min_length Minimum read length threshold
  * @param num_threads Number of OpenMP threads to use
+ * @param is_dehost Flag indicating if this is dehost mode (selects the dehost calling rule)
  * @param total_reads_processed Reference to counter for processed read pairs
  */
 template<typename record_type, typename result_type, typename hash_adaptor_type, typename index_type>
@@ -337,6 +338,7 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                               result_type& result,
                               uint32_t min_length,
                               int num_threads,
+                              bool is_dehost,
                               uint64_t& total_reads_processed) {
     
     // Capture input_summary() BEFORE parallel region to avoid race condition
@@ -415,10 +417,10 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                 read.post_process(input_summary, result.category_or());
                 
                 if (result.model_ready()) {
-                    result.add_paired_read(read, record1, record2);
+                    result.add_paired_read(read, record1, record2, is_dehost);
                 } else {
                     #pragma omp critical(add_read_to_results)
-                    result.add_paired_read(read, record1, record2);
+                    result.add_paired_read(read, record1, record2, is_dehost);
                 }
                 
             } catch (const std::exception& e) {

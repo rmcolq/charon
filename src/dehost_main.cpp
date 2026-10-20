@@ -447,6 +447,7 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index, MemoryM
                 result,
                 opt.min_length,
                 opt.threads,
+                true,  // is_dehost = true for dehost
                 total_reads_processed
             );
 

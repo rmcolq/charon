@@ -76,11 +76,10 @@ public:
             for (const auto [category_index, extract_files]: opt.extract_category_to_file) {
                 for (const auto extract_file: extract_files)
                     extract_handles_[category_index].push_back(seqan3::sequence_file_output{extract_file});
-                cached_reads_.reserve(opt.num_reads_to_fit * summary.num_categories() * 4);
             }
         }
-
-
+        // Reads are cached (and classified later) until the model is trained, whether or not we extract.
+        cached_reads_.reserve(opt.num_reads_to_fit * summary.num_categories() * 4);
     };
 
     Result(const DehostArguments &opt, const InputSummary &summary) :
@@ -95,9 +94,10 @@ public:
             for (const auto [category_index, extract_files]: opt.extract_category_to_file) {
                 for (const auto extract_file: extract_files)
                     extract_handles_[category_index].push_back(seqan3::sequence_file_output{extract_file});
-                cached_reads_.reserve(opt.num_reads_to_fit * summary.num_categories() * 4);
             }
         }
+        // Reads are cached (and classified later) until the model is trained, whether or not we extract.
+        cached_reads_.reserve(opt.num_reads_to_fit * summary.num_categories() * 4);
     };
 
     [[nodiscard]] bool category_or() const {
@@ -161,10 +161,12 @@ public:
 #pragma omp critical(add_to_cache)
             {
                 bool training_complete = false;
+                bool cached = false;
                 if (cache_has_room()) {
                     cache_bytes_ += MemoryManager::cached_read_bytes(read_entry.length(), read_entry.read_id().size(),
                                                                      input_summary_.num_categories(), read_entry.num_hashes());
                     cached_reads_.emplace_back(ReadRecord(false, read_entry, record, record_type{}));
+                    cached = true;
                     training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
                 } else {
                     stats_model_.force_ready();
@@ -173,6 +175,13 @@ public:
 
                 if (training_complete)
                     classify_cache(dehost);
+                if (not cached) {
+                    // the cache was full, so this read was neither cached nor classified above
+                    auto category_index = classify_read(read_entry, dehost);
+                    if (run_extract_ and extract_handles_.find(category_index) != extract_handles_.end()) {
+                        extract_read(category_index, record);
+                    }
+                }
                 if (stats_model_.ready())
                     model_ready_.store(true, std::memory_order_release);
             }
@@ -191,10 +200,12 @@ public:
 #pragma omp critical(add_to_cache)
             {
                 bool training_complete = false;
+                bool cached = false;
                 if (cache_has_room()) {
                     cache_bytes_ += MemoryManager::cached_read_bytes(read_entry.length(), read_entry.read_id().size(),
                                                                      input_summary_.num_categories(), read_entry.num_hashes(), true);
                     cached_reads_.emplace_back(ReadRecord(true, read_entry, record, record2));
+                    cached = true;
                     training_complete = stats_model_.add_read_to_training_data(read_entry.unique_proportions());
                 } else {
                     stats_model_.force_ready();
@@ -203,6 +214,13 @@ public:
 
                 if (training_complete)
                     classify_cache(dehost);
+                if (not cached) {
+                    // the cache was full, so this read was neither cached nor classified above
+                    auto category_index = classify_read(read_entry, dehost);
+                    if (run_extract_ and extract_handles_.find(category_index) != extract_handles_.end()) {
+                        extract_paired_read(category_index, record, record2);
+                    }
+                }
                 if (stats_model_.ready())
                     model_ready_.store(true, std::memory_order_release);
             }
@@ -239,6 +257,10 @@ public:
     }
 
     void complete(const bool dehost = false) {
+        // Input ended before every model collected enough training reads: train what we can
+        // (models without enough data fall back to the default KDE) before classifying the cache.
+        if (not stats_model_.ready())
+            stats_model_.force_ready();
         classify_cache(dehost);
     }
 
