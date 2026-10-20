@@ -34,6 +34,7 @@ struct DehostArguments {
     // thresholds for filtering
     float min_quality{15.0};
     uint32_t min_length{140};
+    bool min_length_set{false};  // true when --min_length was given explicitly
     float min_compression{0};
     uint8_t confidence_threshold{7};
     float confidence_probability_threshold{0};
@@ -41,6 +42,10 @@ struct DehostArguments {
     float min_proportion_difference{0.04};
     float min_prob_difference{0};
 
+
+    // Scoring (experimental): "best_bin" compares each category's best bin; "category_or" counts a
+    // hash for a category if any of its bins contains it.
+    std::string scoring{"best_bin"};
 
     // General options
     std::string log_file{"charon.log"};
@@ -71,7 +76,8 @@ struct DehostArguments {
         ss += "\tconfidence_probability_threshold:\t\t" + std::to_string(confidence_probability_threshold) + "\n";
         ss += "\thost_unique_prop_lo_threshold:\t" + std::to_string(host_unique_prop_lo_threshold) + "\n";
         ss += "\tmin_proportion_difference:\t" + std::to_string(min_proportion_difference) + "\n";
-        ss += "\tmin_prob_difference:\t\t" + std::to_string(min_prob_difference) + "\n\n";
+        ss += "\tmin_prob_difference:\t\t" + std::to_string(min_prob_difference) + "\n";
+        ss += "\tscoring:\t\t\t" + scoring + "\n\n";
 
 
         ss += "\tlog_file:\t\t\t" + log_file + "\n";

@@ -3,8 +3,10 @@
 
 #pragma once
 
+#include <sstream>
 #include <string>
 #include <algorithm>
+#include <bit>
 #include <ankerl/unordered_dense.h>
 
 #include <plog/Log.h>
@@ -22,8 +24,9 @@ private:
     float compression_;
 
     uint32_t num_hashes_{0};
-    std::vector<seqan3::interleaved_bloom_filter<seqan3::compressed>::membership_agent_type::binning_bitvector> bits_;// this collects over all bins
-    ankerl::unordered_dense::map<uint8_t, std::vector<bool>> max_bits_; // this summarizes over categories (which may have multiple bins)
+    // IBF hit bits for every hash, stored flat: hash i occupies words [i * bin_words_, (i + 1) * bin_words_)
+    std::vector<uint64_t> bits_;
+    size_t bin_words_{0};
     std::vector<uint32_t> counts_;
     std::vector<uint32_t> unique_counts_;
     std::vector<float> proportions_; // this collects over categories the proportion of all hashes which were from the given category
@@ -54,11 +57,6 @@ public:
             unique_counts_(summary.num_categories(), 0),
             probabilities_(summary.num_categories(), 1) {
         PLOG_DEBUG << "Initialize entry with read_id " << read_id << " and length " << length;
-        bits_.reserve(length);
-
-        for (auto i = 0; i < summary.num_categories(); ++i) {
-            max_bits_[i].reserve(length);
-        }
         PLOG_VERBOSE << "Initializing complete for read_id " << read_id;
     }
 
@@ -95,17 +93,34 @@ public:
 
     void update_entry(const auto &entry) {
         // this "entry" is a bitvector with a 1 or 0 for each bin in the ibf
-        bits_.emplace_back(entry);
+        const auto &bitvector = entry.raw_data();
+        if (bin_words_ == 0) {
+            bin_words_ = (bitvector.size() + 63) / 64;
+            bits_.reserve((length_ / 8 + 16) * bin_words_);
+        }
+        bits_.insert(bits_.end(), bitvector.data(), bitvector.data() + bin_words_);
         num_hashes_ += 1;
     };
+
+    [[nodiscard]] bool bit(const size_t hash, const size_t bin) const {
+        return (bits_[hash * bin_words_ + (bin >> 6)] >> (bin & 63)) & 1u;
+    }
 
     void get_counts(const InputSummary &summary) {
         PLOG_DEBUG << "Get max bits per category for read " << read_id_;
 
         // get totals in each bin
         seqan3::counting_vector<uint64_t> total_bits_per_bin(summary.num_bins, 0);
-        for (const auto &entry: bits_) {
-            total_bits_per_bin += entry;
+        for (size_t i = 0; i < num_hashes_; ++i) {
+            for (size_t word = 0; word < bin_words_; ++word) {
+                uint64_t remaining = bits_[i * bin_words_ + word];
+                while (remaining) {
+                    const size_t bin = (word << 6) + std::countr_zero(remaining);
+                    if (bin < summary.num_bins)
+                        total_bits_per_bin[bin] += 1;
+                    remaining &= remaining - 1;
+                }
+            }
         }
         PLOG_DEBUG << "Have the following total hits per bin: " << total_bits_per_bin;
 
@@ -123,25 +138,18 @@ public:
             }
         }
 
-        //
-        for (auto category = 0; category < summary.num_categories(); ++category) {
-            max_bits_.at(category).resize(num_hashes_);
-        }
-
-        // collect together the bitvector for max bits and the unique_counts
-        std::vector<uint8_t> found;
-        for (const auto &entry: bits_) {
-            found.clear();
+        // count hashes found in exactly one category's best bin
+        for (size_t i = 0; i < num_hashes_; ++i) {
+            uint8_t num_found = 0;
+            uint8_t found_category = 0;
             for (auto category = 0; category < index_per_category.size(); ++category) {
-                const auto &category_index = index_per_category[category];
-                max_bits_.at(category).emplace_back(entry[category_index]);
-                if (entry[category_index] == 1) {
-                    found.push_back(category);
+                if (bit(i, index_per_category[category])) {
+                    ++num_found;
+                    found_category = category;
                 }
             }
-            if (found.size() == 1) {
-                auto i = found.front();
-                unique_counts_.at(i) += 1;
+            if (num_found == 1) {
+                unique_counts_.at(found_category) += 1;
             }
         }
         PLOG_DEBUG << "Found unique counts " << unique_counts_;
@@ -164,8 +172,37 @@ public:
         return;
     }
 
-    void post_process(const InputSummary &summary) {
-        get_counts(summary);
+    // Alternative to get_counts: a hash counts for a category if ANY bin of that category contains it.
+    void get_counts_category_or(const InputSummary &summary) {
+        const auto num_categories = summary.num_categories();
+        std::vector<uint64_t> masks(num_categories * bin_words_, 0);
+        for (size_t bin = 0; bin < summary.num_bins; ++bin) {
+            const auto category = summary.category_index(summary.bin_to_category.at(bin));
+            masks[category * bin_words_ + (bin >> 6)] |= uint64_t{1} << (bin & 63);
+        }
+        for (size_t i = 0; i < num_hashes_; ++i) {
+            uint8_t num_found = 0;
+            uint8_t found_category = 0;
+            for (uint8_t category = 0; category < num_categories; ++category) {
+                bool hit = false;
+                for (size_t word = 0; word < bin_words_; ++word)
+                    hit |= (bits_[i * bin_words_ + word] & masks[category * bin_words_ + word]) != 0;
+                if (hit) {
+                    counts_.at(category) += 1;
+                    ++num_found;
+                    found_category = category;
+                }
+            }
+            if (num_found == 1)
+                unique_counts_.at(found_category) += 1;
+        }
+    };
+
+    void post_process(const InputSummary &summary, const bool category_or = false) {
+        if (category_or)
+            get_counts_category_or(summary);
+        else
+            get_counts(summary);
         get_proportions();
     }
 
@@ -366,32 +403,30 @@ public:
             }
             std::cout << "\t";
         }*/
-        for (auto i = 0; i < summary.num_categories(); i++) {
-            //const auto & category = summary.categories.at(i);
-            const auto &bitvector = max_bits_.at(i);
-            for (auto j = 0; j < bitvector.size(); j++) {
-                std::cout << +bitvector.at(j);
-            }
-            std::cout << "\t";
-        }
-        std::cout << std::endl;
+        std::cout << '\n';
     };
 
-    void print_assignment_result(const InputSummary &summary) const {
+    // Formats the line printed by print_assignment_result, so it can be built outside any lock.
+    [[nodiscard]] std::string assignment_line(const InputSummary &summary) const {
         // mimic the kraken assignment format with tab separated columns classification status, read_id, call, length, num_hashes, details
+        std::ostringstream out;
         if (call_ == std::numeric_limits<uint8_t>::max())
-            std::cout << "U" << "\t";
+            out << "U" << "\t";
         else
-            std::cout << "C" << "\t";
-        std::cout.precision(6);
-        std::cout << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t"
-                  << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
+            out << "C" << "\t";
+        out.precision(6);
+        out << read_id_ << "\t" << summary.category_name(call_) << "\t" << length_ << "\t" << num_hashes_ << "\t"
+            << mean_quality_ << "\t" << +confidence_score_ << "\t" << compression_ << "\t";
         for (auto i = 0; i < summary.num_categories(); i++) {
-            std::cout << summary.categories.at(i) << ":" << counts_.at(i) << ":" << proportions_.at(i)
-                      << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";
+            out << summary.categories.at(i) << ":" << counts_.at(i) << ":" << proportions_.at(i)
+                << ":" << unique_proportions_.at(i) << ":" << probabilities_.at(i) << " ";
         }
+        out << '\n';
+        return out.str();
+    }
 
-        std::cout << std::endl;
+    void print_assignment_result(const InputSummary &summary) const {
+        std::cout << assignment_line(summary);
     };
 };
 

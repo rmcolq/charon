@@ -265,9 +265,16 @@ void setup_dehost_subcommand(CLI::App &app) {
     dehost_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
             ->type_name("STRING");
 
-    dehost_subcommand
-            ->add_option("--min_length", opt->min_length, "Minimum read length to classify.")
+    auto *min_length_option = dehost_subcommand
+            ->add_option("--min_length", opt->min_length,
+                         "Minimum read length to classify (per mate for paired reads, default 80 when paired).")
             ->type_name("INT")
+            ->capture_default_str();
+
+    dehost_subcommand
+            ->add_option("--scoring", opt->scoring,
+                         "Experimental: how hits are summarised per category [best_bin, category_or].")
+            ->check(CLI::IsMember({"best_bin", "category_or"}))
             ->capture_default_str();
 
     dehost_subcommand
@@ -317,7 +324,8 @@ void setup_dehost_subcommand(CLI::App &app) {
             "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
 
     // Set the function that will be called when this subcommand is issued.
-    dehost_subcommand->callback([opt]() {
+    dehost_subcommand->callback([opt, min_length_option]() {
+        opt->min_length_set = min_length_option->count() > 0;
         // A failed run (e.g. the index does not fit in memory) must give a non-zero exit status
         const int status = dehost_main(*opt);
         if (status != 0)
@@ -477,7 +485,8 @@ int dehost_main(DehostArguments &opt) {
 
     if (opt.read_file2 != "") {
         opt.is_paired = true;
-        opt.min_length = 80;
+        if (not opt.min_length_set)
+            opt.min_length = 80;
     }
 
     MemoryManager mem_mgr(opt.max_memory_gb > 0 ? static_cast<size_t>(opt.max_memory_gb) * 1024 : 0);

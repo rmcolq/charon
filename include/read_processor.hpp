@@ -180,16 +180,21 @@ void process_single_read(const std::string& read_id,
     }
     
     // Post-process: compute counts, proportions, and probabilities
-    read.post_process(result.input_summary());
+    read.post_process(result.input_summary(), result.category_or());
     
     // Add to results (thread-safe critical section)
-    #pragma omp critical(add_read_to_results)
-    {
+    auto add = [&]() {
         if constexpr (requires { result.add_read(read, record, is_dehost); }) {
             result.add_read(read, record, is_dehost);
         } else {
             result.add_read(read, record);
         }
+    };
+    if (result.model_ready()) {
+        add();
+    } else {
+        #pragma omp critical(add_read_to_results)
+        add();
     }
 }
 
@@ -277,16 +282,21 @@ void process_read_batch(const std::vector<record_type>& records,
                 }
                 
                 // Post-process: compute counts, proportions, and probabilities - use captured input_summary
-                read.post_process(input_summary);
+                read.post_process(input_summary, result.category_or());
                 
                 // Add to results (thread-safe)
-                #pragma omp critical(add_read_to_results)
-                {
+                auto add = [&]() {
                     if constexpr (requires { result.add_read(read, record, is_dehost); }) {
                         result.add_read(read, record, is_dehost);
                     } else {
                         result.add_read(read, record);
                     }
+                };
+                if (result.model_ready()) {
+                    add();
+                } else {
+                    #pragma omp critical(add_read_to_results)
+                    add();
                 }
                 
             } catch (const std::exception& e) {
@@ -402,10 +412,14 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                     read.update_entry(entry);
                 }
                 
-                read.post_process(input_summary);
+                read.post_process(input_summary, result.category_or());
                 
-                #pragma omp critical(add_read_to_results)
-                result.add_paired_read(read, record1, record2);
+                if (result.model_ready()) {
+                    result.add_paired_read(read, record1, record2);
+                } else {
+                    #pragma omp critical(add_read_to_results)
+                    result.add_paired_read(read, record1, record2);
+                }
                 
             } catch (const std::exception& e) {
                 PLOG_ERROR << "Error processing paired read " << records1[i].id() << ": " << e.what();

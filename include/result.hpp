@@ -3,6 +3,7 @@
 
 #pragma once
 
+#include <atomic>
 #include <string>
 #include <ankerl/unordered_dense.h>
 
@@ -45,6 +46,10 @@ private:
     size_t cache_byte_budget_{0};  // 0 = unlimited
 
     bool run_extract_;
+    // Set (release) once stats_model_ is trained; after that reads can be classified without the
+    // add_read_to_results lock, because the model is only read from then on.
+    std::atomic<bool> model_ready_{false};
+    bool category_or_{false};
     ankerl::unordered_dense::map<uint8_t, std::vector<seqan3::sequence_file_output<outfile_field_ids, outfile_format>>> extract_handles_;
 
 public:
@@ -82,7 +87,8 @@ public:
             input_summary_{summary},
             result_summary_(summary.num_categories()),
             cache_byte_budget_(opt.cache_byte_budget),
-            run_extract_(opt.run_extract) {
+            run_extract_(opt.run_extract),
+            category_or_(opt.scoring == "category_or") {
         result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
         stats_model_ = StatsModel(opt, summary);
         if (opt.run_extract) {
@@ -93,6 +99,14 @@ public:
             }
         }
     };
+
+    [[nodiscard]] bool category_or() const {
+        return category_or_;
+    }
+
+    [[nodiscard]] bool model_ready() const {
+        return model_ready_.load(std::memory_order_acquire);
+    }
 
     const InputSummary &input_summary() const {
         return input_summary_;
@@ -108,8 +122,9 @@ public:
             read_entry.dehost(stats_model_, input_summary_.host_category_index());
         else
             read_entry.classify(stats_model_);
+        const auto line = read_entry.assignment_line(input_summary_);
 #pragma omp critical(print_result)
-        read_entry.print_assignment_result(input_summary_);
+        std::cout << line;
 #pragma omp critical(update_result_count)
         {
             const auto &call = read_entry.call();
@@ -158,6 +173,8 @@ public:
 
                 if (training_complete)
                     classify_cache(dehost);
+                if (stats_model_.ready())
+                    model_ready_.store(true, std::memory_order_release);
             }
         }
     }
@@ -186,6 +203,8 @@ public:
 
                 if (training_complete)
                     classify_cache(dehost);
+                if (stats_model_.ready())
+                    model_ready_.store(true, std::memory_order_release);
             }
         }
     }
