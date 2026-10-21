@@ -307,6 +307,12 @@ int classify_main(ClassifyArguments &opt) {
         opt.num_reads_to_fit = opt.chunk_size;
     }
 
+    if (index.num_categories() < 2) {
+        PLOG_ERROR << "classify needs an index with at least two categories to compare; "
+                   << "use dehost for an index with only the host category";
+        return 1;
+    }
+
     opt.run_extract = (opt.category_to_extract != "");
     const auto categories = index.categories();
     if (opt.run_extract and opt.category_to_extract != "all" and

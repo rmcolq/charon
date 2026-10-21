@@ -501,10 +501,23 @@ int dehost_main(DehostArguments &opt) {
         opt.num_reads_to_fit = opt.chunk_size;
     }
     auto host_index = index.get_host_index();
+    if (host_index == std::numeric_limits<uint8_t>::max()) {
+        PLOG_ERROR << "The index must contain a 'host' or 'human' category to dehost";
+        return 1;
+    }
     PLOG_INFO << "Found host at index " << +host_index << " in the index categories";
 
+    // An index with only the host category has no microbial category to compare against, so reads are
+    // called host or not host. Reads which are not called host are extracted as "non_host".
+    const bool host_only = index.num_categories() == 1;
+    if (host_only)
+        PLOG_INFO << "The index has only the host category, so reads will be called host or not host";
+    const std::string non_host = "non_host";
+
     opt.run_extract = (opt.category_to_extract != "");
-    const auto categories = index.categories();
+    auto categories = index.categories();
+    if (host_only)
+        categories.push_back(non_host);
     if (opt.run_extract and opt.category_to_extract != "all" and
         std::find(categories.begin(), categories.end(), opt.category_to_extract) == categories.end()) {
         std::string options = "";
@@ -523,7 +536,10 @@ int dehost_main(DehostArguments &opt) {
 
         const auto extension = get_extension(opt.read_file);
         for (const auto &category: to_extract) {
-            const auto category_index = index.get_category_index(category);
+            // reads which are not called have the maximum category value
+            const auto category_index = (host_only and category == non_host)
+                                        ? std::numeric_limits<uint8_t>::max()
+                                        : index.get_category_index(category);
             if (opt.is_paired) {
                 opt.extract_category_to_file[category_index].push_back(
                         opt.prefix + "_" + category + "_1" + extension + ".gz");

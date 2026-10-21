@@ -265,3 +265,47 @@ TEST_CASE("StatsModel with zero categories", "[StatsModel]") {
     
     REQUIRE_NOTHROW(StatsModel(opt, summary));
 }
+
+// ─── single category (host only) training ────────────────────────────────────
+
+TEST_CASE("StatsModel trains a single host category from reads above and below the threshold", "[StatsModel]") {
+    DehostArguments opt;
+    opt.num_reads_to_fit = 10;
+    opt.lo_hi_threshold = 0.15f;
+    opt.dist = "kde";
+
+    InputSummary summary;
+    summary.num_bins = 1;
+    summary.categories = {"human"};
+
+    StatsModel model(opt, summary);
+    REQUIRE_FALSE(model.ready());
+
+    // reads with a high host proportion give positive examples only, so the model is not ready yet
+    for (int i = 0; i < 12; ++i)
+        model.add_read_to_training_data({0.5f + 0.01f * i});
+    REQUIRE_FALSE(model.ready());
+
+    // reads with a low non-zero host proportion give the negative examples
+    for (int i = 0; i < 12; ++i)
+        model.add_read_to_training_data({0.01f + 0.005f * i});
+    REQUIRE(model.ready());
+}
+
+TEST_CASE("StatsModel ignores reads with no host hits when training a single host category", "[StatsModel]") {
+    DehostArguments opt;
+    opt.num_reads_to_fit = 10;
+    opt.lo_hi_threshold = 0.15f;
+    opt.dist = "kde";
+
+    InputSummary summary;
+    summary.num_bins = 1;
+    summary.categories = {"human"};
+
+    StatsModel model(opt, summary);
+    for (int i = 0; i < 12; ++i)
+        model.add_read_to_training_data({0.5f + 0.01f * i});
+    for (int i = 0; i < 50; ++i)
+        model.add_read_to_training_data({0.0f});
+    REQUIRE_FALSE(model.ready());
+}
