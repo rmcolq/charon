@@ -84,12 +84,14 @@ void delete_hashes(const std::vector<uint8_t>& targets, const std::string& tmp_o
     for (const auto& target : targets) {
         std::filesystem::path outf{tmp_output_folder};
         outf += "/" + std::to_string(target) + ".min";
-        if (std::filesystem::exists(outf)) {
-            std::filesystem::remove(outf);
-        }
+        std::error_code ec;
+        std::filesystem::remove(outf, ec);
     }
-    if (std::filesystem::is_empty(tmp_output_folder)) {
-        std::filesystem::remove(tmp_output_folder);
+    // Several threads can finish their bins together, so another one may already have removed the
+    // folder: use the non-throwing overloads (an exception here would escape an OpenMP region).
+    std::error_code ec;
+    if (std::filesystem::is_empty(tmp_output_folder, ec) and not ec) {
+        std::filesystem::remove(tmp_output_folder, ec);
     }
 }
 
