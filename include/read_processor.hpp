@@ -309,6 +309,9 @@ void process_read_batch(const std::vector<record_type>& records,
         });
     }
     
+    // Reads cached for training are classified here, in parallel, once the model is trained.
+    result.classify_pending(is_dehost);
+
     total_reads_processed += records.size();
 }
 
@@ -434,6 +437,9 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
         });
     }
     
+    // Reads cached for training are classified here, in parallel, once the model is trained.
+    result.classify_pending(is_dehost);
+
     total_reads_processed += records1.size();
 }
 

@@ -44,6 +44,11 @@ private:
     std::vector<ReadRecord<record_type>> cached_reads_;
     size_t cache_bytes_{0};        // estimated bytes held in cached_reads_
     size_t cache_byte_budget_{0};  // 0 = unlimited
+    // Cached reads waiting to be classified now the model is trained. They are moved out of
+    // cached_reads_ inside the add_to_cache lock and classified in parallel by classify_pending,
+    // outside any lock or parallel region.
+    std::vector<ReadRecord<record_type>> pending_reads_;
+    int num_threads_{1};
 
     bool run_extract_;
     // Set (release) once stats_model_ is trained; after that reads can be classified without the
@@ -69,6 +74,7 @@ public:
             input_summary_{summary},
             result_summary_(summary.num_categories()),
             cache_byte_budget_(opt.cache_byte_budget),
+            num_threads_(opt.threads),
             run_extract_(opt.run_extract) {
         result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
         stats_model_ = StatsModel(opt, summary);
@@ -86,6 +92,7 @@ public:
             input_summary_{summary},
             result_summary_(summary.num_categories()),
             cache_byte_budget_(opt.cache_byte_budget),
+            num_threads_(opt.threads),
             run_extract_(opt.run_extract),
             category_or_(opt.scoring == "category_or") {
         result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
@@ -174,7 +181,7 @@ public:
                 }
 
                 if (training_complete)
-                    classify_cache(dehost);
+                    take_cache();
                 if (not cached) {
                     // the cache was full, so this read was neither cached nor classified above
                     auto category_index = classify_read(read_entry, dehost);
@@ -213,7 +220,7 @@ public:
                 }
 
                 if (training_complete)
-                    classify_cache(dehost);
+                    take_cache();
                 if (not cached) {
                     // the cache was full, so this read was neither cached nor classified above
                     auto category_index = classify_read(read_entry, dehost);
@@ -235,10 +242,27 @@ public:
         return cache_byte_budget_ == 0 || cache_bytes_ < cache_byte_budget_;
     }
 
-    void classify_cache(const bool dehost = false) {
-        PLOG_VERBOSE << "Classify cached reads";
+    // Called with the add_to_cache lock held, once the model is trained: hand the cached reads to
+    // classify_pending. The byte count drops with them, as before, since the cache is not refilled.
+    void take_cache() {
+        pending_reads_.insert(pending_reads_.end(), std::make_move_iterator(cached_reads_.begin()),
+                              std::make_move_iterator(cached_reads_.end()));
+        cached_reads_.clear();
+        cached_reads_.shrink_to_fit();
+        cache_bytes_ = 0;
+    }
 
-        for (auto &read_record: cached_reads_) {
+    // Classify the reads taken from the cache, in parallel. Must be called outside any parallel
+    // region (after each batch, and from complete). classify_read and the extract functions take
+    // their own locks, and the model is only read once trained.
+    void classify_pending(const bool dehost = false) {
+        if (pending_reads_.empty())
+            return;
+        PLOG_VERBOSE << "Classify " << pending_reads_.size() << " cached reads";
+
+#pragma omp parallel for num_threads(num_threads_) schedule(dynamic, 64)
+        for (size_t i = 0; i < pending_reads_.size(); ++i) {
+            auto &read_record = pending_reads_[i];
             auto &read_entry = read_record.read;
             const auto &record = read_record.record;
             auto category_index = classify_read(read_entry, dehost);
@@ -251,9 +275,8 @@ public:
                 }
             }
         }
-        cached_reads_.clear();
-        cached_reads_.shrink_to_fit();
-        cache_bytes_ = 0;
+        pending_reads_.clear();
+        pending_reads_.shrink_to_fit();
     }
 
     void complete(const bool dehost = false) {
@@ -261,7 +284,8 @@ public:
         // (models without enough data fall back to the default KDE) before classifying the cache.
         if (not stats_model_.ready())
             stats_model_.force_ready();
-        classify_cache(dehost);
+        take_cache();
+        classify_pending(dehost);
     }
 
 
