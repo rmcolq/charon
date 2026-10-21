@@ -89,11 +89,6 @@ void setup_index_subcommand(CLI::App &app) {
             ->check(CLI::Range(1, 4096))
             ->capture_default_str();
 
-    index_subcommand->add_option("--merge-categories", opt->merge_categories,
-                                 "With --balance: put all bins of these categories into a single scoring group "
-                                 "(split into technical bins as needed).")
-            ->type_name("STRING ...");
-
     index_subcommand->add_option("--category-fpr", opt->category_fpr_args,
                                  "With --balance: target fpr for the bins of a category, e.g. human=0.002. Its bins are "
                                  "split into more, less loaded technical bins (scoring takes the best bin per category, "
@@ -382,13 +377,7 @@ balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &sta
         const auto &category = summary.bin_to_category.at(bin);
         const auto category_capacity = capacity_for(category);
         size_t group = group_load.size();
-        const bool merge_all = std::find(opt.merge_categories.begin(), opt.merge_categories.end(), category) !=
-                               opt.merge_categories.end();
-        if (merge_all) {
-            const auto it = std::find(group_category.begin(), group_category.end(), category);
-            if (it != group_category.end())
-                group = static_cast<size_t>(it - group_category.begin());
-        } else if (num_hashes < category_capacity) {
+        if (num_hashes < category_capacity) {
             for (size_t g = 0; g < group_load.size(); ++g) {
                 if (group_category[g] == category and group_load[g] + num_hashes <= category_capacity) {
                     group = g;

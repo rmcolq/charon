@@ -33,7 +33,6 @@ struct IndexArguments {
     bool balance{false};       // merge small and split large bins so technical bins hold similar numbers of minimisers
     uint64_t bin_capacity{0};  // minimisers per technical bin when balancing (0 = total / technical_bins)
     uint32_t technical_bins{256};
-    std::vector<std::string> merge_categories{};  // with --balance: all bins of these categories form one scoring group
     std::vector<std::string> category_fpr_args{};  // "category=fpr" strings from the command line
     std::map<std::string, double> category_fpr{};  // with --balance: lower target fpr for these categories (e.g. host)
 
@@ -56,10 +55,7 @@ struct IndexArguments {
         ss += "\tbalance:\t\t" + std::to_string(balance) + "\n";
         ss += "\tbin_capacity:\t\t" + std::to_string(bin_capacity) + "\n";
         ss += "\ttechnical_bins:\t\t" + std::to_string(technical_bins) + "\n";
-        ss += "\tmerge_categories:\t";
-        for (const auto &category: merge_categories)
-            ss += category + " ";
-        ss += "\n\tcategory_fpr:\t\t";
+        ss += "\tcategory_fpr:\t\t";
         for (const auto &[category, fpr]: category_fpr)
             ss += category + "=" + std::to_string(fpr) + " ";
         ss += "\n\n";
