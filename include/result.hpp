@@ -54,7 +54,6 @@ private:
     // Set (release) once stats_model_ is trained; after that reads can be classified without the
     // add_read_to_results lock, because the model is only read from then on.
     std::atomic<bool> model_ready_{false};
-    bool category_or_{false};
     ankerl::unordered_dense::map<uint8_t, std::vector<seqan3::sequence_file_output<outfile_field_ids, outfile_format>>> extract_handles_;
 
 public:
@@ -93,8 +92,7 @@ public:
             result_summary_(summary.num_categories()),
             cache_byte_budget_(opt.cache_byte_budget),
             num_threads_(opt.threads),
-            run_extract_(opt.run_extract),
-            category_or_(opt.scoring == "category_or") {
+            run_extract_(opt.run_extract) {
         result_summary_.classified_counts.reserve(summary.num_categories());  // Pre-allocate
         stats_model_ = StatsModel(opt, summary);
         if (opt.run_extract) {
@@ -106,10 +104,6 @@ public:
         // Reads are cached (and classified later) until the model is trained, whether or not we extract.
         cached_reads_.reserve(opt.num_reads_to_fit * summary.num_categories() * 4);
     };
-
-    [[nodiscard]] bool category_or() const {
-        return category_or_;
-    }
 
     [[nodiscard]] bool model_ready() const {
         return model_ready_.load(std::memory_order_acquire);

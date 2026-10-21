@@ -180,7 +180,7 @@ void process_single_read(const std::string& read_id,
     }
     
     // Post-process: compute counts, proportions, and probabilities
-    read.post_process(result.input_summary(), result.category_or());
+    read.post_process(result.input_summary());
     
     // Add to results (thread-safe critical section)
     auto add = [&]() {
@@ -284,7 +284,7 @@ void process_read_batch(const std::vector<record_type>& records,
                 }
                 
                 // Post-process: compute counts, proportions, and probabilities - use captured input_summary
-                read.post_process(input_summary, result.category_or());
+                read.post_process(input_summary);
                 
                 // Add to results (thread-safe)
                 auto add = [&]() {
@@ -421,7 +421,7 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                     read.update_entry(entry, value, layout);
                 }
                 
-                read.post_process(input_summary, result.category_or());
+                read.post_process(input_summary);
                 
                 if (result.model_ready()) {
                     result.add_paired_read(read, record1, record2, is_dehost);

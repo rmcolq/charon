@@ -272,12 +272,6 @@ void setup_dehost_subcommand(CLI::App &app) {
             ->capture_default_str();
 
     dehost_subcommand
-            ->add_option("--scoring", opt->scoring,
-                         "Experimental: how hits are summarised per category [best_bin, category_or].")
-            ->check(CLI::IsMember({"best_bin", "category_or"}))
-            ->capture_default_str();
-
-    dehost_subcommand
             ->add_option("--min_quality", opt->min_quality, "Minimum read quality to classify.")
             ->type_name("INT")
             ->capture_default_str();

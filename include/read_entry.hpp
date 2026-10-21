@@ -202,37 +202,8 @@ public:
         return;
     }
 
-    // Alternative to get_counts: a hash counts for a category if ANY bin of that category contains it.
-    void get_counts_category_or(const InputSummary &summary) {
-        const auto num_categories = summary.num_categories();
-        std::vector<uint64_t> masks(num_categories * bin_words_, 0);
-        for (size_t bin = 0; bin < summary.num_bins; ++bin) {
-            const auto category = summary.category_index(summary.bin_to_category.at(bin));
-            masks[category * bin_words_ + (bin >> 6)] |= uint64_t{1} << (bin & 63);
-        }
-        for (size_t i = 0; i < num_hashes_; ++i) {
-            uint8_t num_found = 0;
-            uint8_t found_category = 0;
-            for (uint8_t category = 0; category < num_categories; ++category) {
-                bool hit = false;
-                for (size_t word = 0; word < bin_words_; ++word)
-                    hit |= (bits_[i * bin_words_ + word] & masks[category * bin_words_ + word]) != 0;
-                if (hit) {
-                    counts_.at(category) += 1;
-                    ++num_found;
-                    found_category = category;
-                }
-            }
-            if (num_found == 1)
-                unique_counts_.at(found_category) += 1;
-        }
-    };
-
-    void post_process(const InputSummary &summary, const bool category_or = false) {
-        if (category_or)
-            get_counts_category_or(summary);
-        else
-            get_counts(summary);
+    void post_process(const InputSummary &summary) {
+        get_counts(summary);
         get_proportions();
     }
 
