@@ -37,7 +37,7 @@ void setup_index_subcommand(CLI::App &app) {
             ->add_option("--profile", opt->profile,
                          "Preset parameters for the read technology the index will classify: nanopore (w 41, k 19, "
                          "fpr 0.05) or illumina (w 27, k 19, fpr 0.01); both --balance with host fpr 0.0005. "
-                         "Options given explicitly override the preset.")
+                         "-w, -k, --fpr and --category-fpr given explicitly override the preset.")
             ->check(CLI::IsMember({"nanopore", "illumina"}))
             ->type_name("STRING");
 
@@ -69,9 +69,6 @@ void setup_index_subcommand(CLI::App &app) {
             ->transform(make_absolute)
             ->type_name("FILE");
 
-    auto *optimize_option = index_subcommand->add_flag(
-            "--optimize", opt->optimize, "Compress the number of bins for improved classification run time");
-
     auto *fpr_option = index_subcommand->add_option("--fpr", opt->max_fpr, "Target false positive rate per bin.")
             ->type_name("FLOAT")
             ->check(CLI::Range(0.0001, 0.5))
@@ -84,8 +81,7 @@ void setup_index_subcommand(CLI::App &app) {
 
     index_subcommand->add_flag(
             "--balance", opt->balance,
-            "Balance the IBF: pack small bins of a category together and split large bins into technical bins.")
-            ->excludes("--optimize");
+            "Balance the IBF: pack small bins of a category together and split large bins into technical bins.");
 
     index_subcommand->add_option("--bin-capacity", opt->bin_capacity,
                                  "Minimisers per technical bin with --balance (default: total / --technical-bins).")
@@ -112,10 +108,9 @@ void setup_index_subcommand(CLI::App &app) {
 
 
     // Set the function that will be called when this subcommand is issued.
-    index_subcommand->callback([opt, profile_option, window_option, kmer_option, fpr_option, optimize_option]() {
+    index_subcommand->callback([opt, profile_option, window_option, kmer_option, fpr_option]() {
         if (profile_option->count() > 0)
-            apply_profile(*opt, window_option->count() > 0, kmer_option->count() > 0, fpr_option->count() > 0,
-                          optimize_option->count() > 0);
+            apply_profile(*opt, window_option->count() > 0, kmer_option->count() > 0, fpr_option->count() > 0);
         index_main(*opt);
     });
 }
@@ -136,8 +131,7 @@ static const std::map<std::string, IndexProfile> index_profiles{
         {"illumina", {27, 19, 0.01, 0.0005}},
 };
 
-void apply_profile(IndexArguments &opt, const bool window_set, const bool kmer_set, const bool fpr_set,
-                   const bool optimize_set) {
+void apply_profile(IndexArguments &opt, const bool window_set, const bool kmer_set, const bool fpr_set) {
     const auto &profile = index_profiles.at(opt.profile);
     if (not window_set)
         opt.window_size = profile.window_size;
@@ -145,8 +139,7 @@ void apply_profile(IndexArguments &opt, const bool window_set, const bool kmer_s
         opt.kmer_size = profile.kmer_size;
     if (not fpr_set)
         opt.max_fpr = profile.max_fpr;
-    if (not optimize_set)
-        opt.balance = true;
+    opt.balance = true;
     opt.profile_host_fpr = profile.host_fpr;
 }
 
@@ -247,82 +240,6 @@ InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary 
     }
 
     return stats;
-}
-
-ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>>
-optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats) {
-    ankerl::unordered_dense::map<uint8_t, uint8_t> bin_to_bucket_map;
-    ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> bucket_to_bins_map;
-
-    if (stats.hashes_per_bin.size() == 0) {
-        return bucket_to_bins_map;
-    } else if (not opt.optimize) {
-        for (auto bin = 0; bin < summary.num_bins; ++bin) {
-            bucket_to_bins_map[bin].push_back(bin);
-        }
-        return bucket_to_bins_map;
-    }
-
-    PLOG_INFO << "Optimize index bin layout";
-    auto new_summary = InputSummary();
-    auto new_stats = InputStats();
-    new_stats.num_files = stats.num_files;
-
-    auto sorted_pairs = stats.bins_by_size();
-    auto max_num_hashes = sorted_pairs.back().second / 2;
-    PLOG_DEBUG << "Max hashes found for bin " << +sorted_pairs.back().first << " : " << max_num_hashes;
-
-    uint8_t next_bin = 0;
-    ankerl::unordered_dense::map<std::string, uint8_t> last_bin;
-
-    // update stats
-    PLOG_INFO << "Reassign bins";
-    for (const auto &pair: sorted_pairs) {
-        const auto &bin = pair.first;
-        PLOG_DEBUG << "Reassign bin " << +bin;
-        assert(summary.bin_to_category.find(bin) != summary.bin_to_category.end());
-        const auto &category = summary.bin_to_category.at(bin);
-        const auto &num_hashes = pair.second;
-
-        auto assigned_bucket = next_bin;
-        if (last_bin.find(category) != last_bin.end()) {
-            const auto &last_bin_in_category = last_bin[category];
-            const auto &num_hashes_in_last_bin = new_stats.hashes_per_bin[last_bin_in_category];
-            if (num_hashes_in_last_bin + num_hashes < max_num_hashes) {
-                assigned_bucket = last_bin_in_category;
-            } else {
-                next_bin++;
-            }
-        } else {
-            next_bin++;
-        }
-        last_bin[category] = assigned_bucket;
-        bin_to_bucket_map[bin] = assigned_bucket;
-        bucket_to_bins_map[assigned_bucket].push_back(bin);
-        new_stats.hashes_per_bin[assigned_bucket] += num_hashes;
-        PLOG_INFO << "Bin " << +bin << " assigned to bucket " << +assigned_bucket << " which now has "
-                  << new_stats.hashes_per_bin[assigned_bucket] << " hashes";
-        assert(stats.records_per_bin.find(bin) != stats.records_per_bin.end());
-        new_stats.records_per_bin[assigned_bucket] += stats.records_per_bin.at(bin);
-    }
-    stats = new_stats;
-
-    // update summary
-    PLOG_INFO << "Update summary";
-    new_summary.num_bins = next_bin;
-    new_summary.categories = summary.categories;
-    for (const auto &pair: summary.filepath_to_bin) {
-        const auto &filepath = pair.first;
-        const auto &bin = pair.second;
-        PLOG_DEBUG << "Update summary for bin " << +bin;
-        const auto &bucket = bin_to_bucket_map[bin];
-        new_summary.filepath_to_bin.emplace_back(std::make_pair(filepath, bucket));
-        assert(summary.bin_to_category.find(bin) != summary.bin_to_category.end());
-        new_summary.bin_to_category[bucket] = summary.bin_to_category.at(bin);
-    }
-    summary = new_summary;
-
-    return bucket_to_bins_map;
 }
 
 void write_stats(const IndexArguments &opt, const InputSummary &summary, const InputStats &stats) {
@@ -565,7 +482,10 @@ int index_main(IndexArguments &opt) {
         return 0;
     }
 
-    auto bucket_to_bins_map = optimize_layout(opt, summary, stats);
+    // Unbalanced: one IBF bin per input bin
+    ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> bucket_to_bins_map;
+    for (uint8_t bin = 0; bin < summary.num_bins; ++bin)
+        bucket_to_bins_map[bin].push_back(bin);
     auto index = build_index(opt, summary, stats, bucket_to_bins_map);
 
     store_index(opt.prefix, std::move(index));

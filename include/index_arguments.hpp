@@ -28,7 +28,6 @@ struct IndexArguments {
     std::string log_file{"charon.log"};
     uint8_t threads{1};
     uint8_t verbosity{0};
-    bool optimize{false};
     bool stats_only{false};  // count minimisers per file and report sizes, without building the IBF
     bool balance{false};       // merge small and split large bins so technical bins hold similar numbers of minimisers
     uint64_t bin_capacity{0};  // minimisers per technical bin when balancing (0 = total / technical_bins)
@@ -53,7 +52,6 @@ struct IndexArguments {
         ss += "\tnum_hash:\t\t" + std::to_string(num_hash) + "\n";
         ss += "\tmax_fpr:\t\t" + std::to_string(max_fpr) + "\n\n";
 
-        ss += "\toptimize:\t\t" + std::to_string(optimize) + "\n";
         ss += "\tstats_only:\t\t" + std::to_string(stats_only) + "\n";
         ss += "\tbalance:\t\t" + std::to_string(balance) + "\n";
         ss += "\tbin_capacity:\t\t" + std::to_string(bin_capacity) + "\n";

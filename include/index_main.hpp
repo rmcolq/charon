@@ -23,14 +23,11 @@ class InputSummary;
 
 void setup_index_subcommand(CLI::App &app);
 
-void apply_profile(IndexArguments &opt, bool window_set, bool kmer_set, bool fpr_set, bool optimize_set);
+void apply_profile(IndexArguments &opt, bool window_set, bool kmer_set, bool fpr_set);
 
 InputSummary parse_input_file(const std::filesystem::path &input_file);
 
 InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary &summary);
-
-ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>>
-optimize_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats);
 
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
                   const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map);
