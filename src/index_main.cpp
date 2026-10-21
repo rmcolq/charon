@@ -33,13 +33,21 @@ void setup_index_subcommand(CLI::App &app) {
             ->check(CLI::ExistingFile.description(""))
             ->type_name("FILE");
 
-    index_subcommand
+    auto *profile_option = index_subcommand
+            ->add_option("--profile", opt->profile,
+                         "Preset parameters for the read technology the index will classify: nanopore (w 41, k 19, "
+                         "fpr 0.05) or illumina (w 27, k 19, fpr 0.01); both --balance with host fpr 0.0005. "
+                         "Options given explicitly override the preset.")
+            ->check(CLI::IsMember({"nanopore", "illumina"}))
+            ->type_name("STRING");
+
+    auto *window_option = index_subcommand
             ->add_option(
                     "-w", opt->window_size, "Window size for (w,k,s)-minimers (must be <=k).")
             ->type_name("INT")
             ->capture_default_str();
 
-    index_subcommand->add_option("-k", opt->kmer_size, "K-mer size for (w,k,s)-minimers.")
+    auto *kmer_option = index_subcommand->add_option("-k", opt->kmer_size, "K-mer size for (w,k,s)-minimers.")
             ->type_name("INT")
             ->capture_default_str();
 
@@ -61,10 +69,10 @@ void setup_index_subcommand(CLI::App &app) {
             ->transform(make_absolute)
             ->type_name("FILE");
 
-    index_subcommand->add_flag(
+    auto *optimize_option = index_subcommand->add_flag(
             "--optimize", opt->optimize, "Compress the number of bins for improved classification run time");
 
-    index_subcommand->add_option("--fpr", opt->max_fpr, "Target false positive rate per bin.")
+    auto *fpr_option = index_subcommand->add_option("--fpr", opt->max_fpr, "Target false positive rate per bin.")
             ->type_name("FLOAT")
             ->check(CLI::Range(0.0001, 0.5))
             ->capture_default_str();
@@ -104,9 +112,43 @@ void setup_index_subcommand(CLI::App &app) {
 
 
     // Set the function that will be called when this subcommand is issued.
-    index_subcommand->callback([opt]() { index_main(*opt); });
+    index_subcommand->callback([opt, profile_option, window_option, kmer_option, fpr_option, optimize_option]() {
+        if (profile_option->count() > 0)
+            apply_profile(*opt, window_option->count() > 0, kmer_option->count() > 0, fpr_option->count() > 0,
+                          optimize_option->count() > 0);
+        index_main(*opt);
+    });
 }
 
+
+// Index presets per read technology, from the evaluation on the Hall et al. 2024 Nanopore and Illumina
+// read sets: a host bin false positive rate well below the microbial one matters because scoring takes
+// the best host bin, and short reads need a smaller window for enough minimisers per read.
+struct IndexProfile {
+    uint8_t window_size;
+    uint8_t kmer_size;
+    double max_fpr;
+    double host_fpr;
+};
+
+static const std::map<std::string, IndexProfile> index_profiles{
+        {"nanopore", {41, 19, 0.05, 0.0005}},
+        {"illumina", {27, 19, 0.01, 0.0005}},
+};
+
+void apply_profile(IndexArguments &opt, const bool window_set, const bool kmer_set, const bool fpr_set,
+                   const bool optimize_set) {
+    const auto &profile = index_profiles.at(opt.profile);
+    if (not window_set)
+        opt.window_size = profile.window_size;
+    if (not kmer_set)
+        opt.kmer_size = profile.kmer_size;
+    if (not fpr_set)
+        opt.max_fpr = profile.max_fpr;
+    if (not optimize_set)
+        opt.balance = true;
+    opt.profile_host_fpr = profile.host_fpr;
+}
 
 InputSummary parse_input_file(const std::filesystem::path &input_file) {
     PLOG_INFO << "Parsing input file " << input_file;
@@ -502,6 +544,16 @@ int index_main(IndexArguments &opt) {
 
 
     auto summary = parse_input_file(opt.input_file);
+    if (opt.profile_host_fpr > 0) {
+        // the profile's host fpr applies to whichever category is the host, unless --category-fpr set it
+        for (const auto &host: {"host", "human"}) {
+            if (summary.category_index(host) != std::numeric_limits<uint8_t>::max() and
+                not opt.category_fpr.contains(host)) {
+                opt.category_fpr[host] = opt.profile_host_fpr;
+                PLOG_INFO << "Profile " << opt.profile << ": category " << host << " uses fpr " << opt.profile_host_fpr;
+            }
+        }
+    }
     auto stats = count_and_store_hashes(opt, summary);
     if (opt.stats_only) {
         write_stats(opt, summary, stats);

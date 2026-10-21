@@ -35,12 +35,15 @@ struct IndexArguments {
     uint32_t technical_bins{256};
     std::vector<std::string> category_fpr_args{};  // "category=fpr" strings from the command line
     std::map<std::string, double> category_fpr{};  // with --balance: lower target fpr for these categories (e.g. host)
+    std::string profile{};          // "nanopore" or "illumina": preset w, k, fpr, balance and host fpr
+    double profile_host_fpr{0};     // host fpr from the profile, applied to the "host"/"human" category once known
 
     std::string to_string() {
         std::string ss;
 
         ss += "\n\nIndex Arguments:\n\n";
         ss += "\tinput_file:\t\t" + input_file + "\n";
+        ss += "\tprofile:\t\t" + (profile.empty() ? std::string{"none"} : profile) + "\n";
         ss += "\tprefix:\t\t\t" + prefix + "\n";
         ss += "\ttmp_dir:\t\t" + tmp_dir + "\n\n";
 
