@@ -64,11 +64,6 @@ void setup_index_subcommand(CLI::App &app) {
             ->check(CLI::NonexistentPath.description(""))
             ->default_str("<prefix>");
 
-    index_subcommand->add_option("--temp", opt->tmp_dir,
-                                 "Unused: the index is built without temporary files. Kept so existing commands run.")
-            ->type_name("DIR")
-            ->default_str("<dir>");
-
     index_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
             ->type_name("FILE");

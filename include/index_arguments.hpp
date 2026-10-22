@@ -13,7 +13,6 @@ struct IndexArguments {
     // IO options
     std::string input_file;
     std::string prefix;
-    std::string tmp_dir;
 
     // kmer/sketching
     uint8_t window_size{41};
@@ -43,8 +42,7 @@ struct IndexArguments {
         ss += "\n\nIndex Arguments:\n\n";
         ss += "\tinput_file:\t\t" + input_file + "\n";
         ss += "\tprofile:\t\t" + (profile.empty() ? std::string{"none"} : profile) + "\n";
-        ss += "\tprefix:\t\t\t" + prefix + "\n";
-        ss += "\ttmp_dir:\t\t" + tmp_dir + "\n\n";
+        ss += "\tprefix:\t\t\t" + prefix + "\n\n";
 
         ss += "\twindow_size:\t\t" + std::to_string(window_size) + "\n";
         ss += "\tkmer_size:\t\t" + std::to_string(kmer_size) + "\n\n";
