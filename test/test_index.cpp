@@ -242,3 +242,111 @@ TEST_CASE("Index written in the pre-v4 format still loads, compressed", "[Index]
     loaded.with_agent([&](auto &agent) { found = agent.bulk_contains(7u)[2]; });
     REQUIRE(found);
 }
+
+// ─── ConcurrentIbfInserter ────────────────────────────────────────────────────
+
+#include <random>
+
+#include "concurrent_ibf.hpp"
+#include "hyperloglog.hpp"
+
+TEST_CASE("ConcurrentIbfInserter sets the same bits as emplace", "[ConcurrentIbfInserter]") {
+    for (const size_t num_bins: {1, 63, 64, 70, 300}) {
+        for (const size_t num_hash: {1, 2, 3, 5}) {
+            const size_t num_bits = 10007;
+            Index::ibf_uncompressed expected{seqan3::bin_count{num_bins}, seqan3::bin_size{num_bits},
+                                             seqan3::hash_function_count{num_hash}};
+            Index::ibf_uncompressed actual{seqan3::bin_count{num_bins}, seqan3::bin_size{num_bits},
+                                           seqan3::hash_function_count{num_hash}};
+            std::mt19937_64 rng{num_bins * 10 + num_hash};
+            std::vector<std::pair<uint64_t, size_t>> values;
+            for (size_t i = 0; i < 20000; ++i)
+                values.emplace_back(rng(), rng() % num_bins);
+            for (const auto &[value, bin]: values)
+                expected.emplace(value, seqan3::bin_index{bin});
+            const ConcurrentIbfInserter inserter{actual};
+#pragma omp parallel for num_threads(4)
+            for (size_t i = 0; i < values.size(); ++i)
+                inserter.emplace(values[i].first, values[i].second);
+            REQUIRE(actual == expected);
+        }
+    }
+}
+
+// ─── HyperLogLog ──────────────────────────────────────────────────────────────
+
+TEST_CASE("HyperLogLog estimates distinct values within 1 %", "[HyperLogLog]") {
+    for (const uint64_t n: {0ULL, 1ULL, 100ULL, 10000ULL, 300000ULL, 3000000ULL}) {
+        HyperLogLog sketch;
+        // Small consecutive integers, like k-mer codes, and each added twice
+        for (uint64_t i = 0; i < n; ++i) {
+            sketch.add(i);
+            sketch.add(i);
+        }
+        const auto estimate = static_cast<double>(sketch.estimate());
+        if (n == 0)
+            REQUIRE(estimate == 0);
+        else
+            REQUIRE(std::abs(estimate - static_cast<double>(n)) <= std::max(1.0, 0.01 * static_cast<double>(n)));
+    }
+}
+
+// ─── for_each_fasta_chunk ─────────────────────────────────────────────────────
+
+#include <set>
+
+#include <seqan3/io/sequence_file/input.hpp>
+#include <seqan3/search/views/minimiser_hash.hpp>
+
+#include "fasta_chunks.hpp"
+
+TEST_CASE("for_each_fasta_chunk yields the same minimisers as whole records", "[for_each_fasta_chunk]") {
+    std::mt19937_64 rng{42};
+    std::string fasta;
+    for (size_t record = 0; record < 6; ++record) {
+        fasta += ">record " + std::to_string(record) + " with a description\n";
+        const size_t length = record == 3 ? 10 : 500 + 731 * record;  // one record shorter than the window
+        for (size_t i = 0; i < length; ++i) {
+            fasta += "ACGTacgtNRY"[rng() % (i % 97 == 0 ? 11 : 8)];
+            if (i % 60 == 59)
+                fasta += i % 120 == 119 ? "\r\n" : " 12\n";
+        }
+        fasta += "\n";
+    }
+    const auto dir = std::filesystem::temp_directory_path() / "charon_test_fasta_chunks";
+    std::filesystem::create_directories(dir);
+    const auto plain = dir / "test.fa";
+    const auto compressed = dir / "test.fa.gz";
+    std::ofstream{plain} << fasta;
+    gzFile out = gzopen(compressed.c_str(), "wb");
+    gzwrite(out, fasta.data(), static_cast<unsigned>(fasta.size()));
+    gzclose(out);
+
+    const uint8_t window = 23;
+    const auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{15}},
+                                                            seqan3::window_size{window});
+    std::set<uint64_t> expected;
+    uint64_t expected_records = 0;
+    seqan3::sequence_file_input fin{plain};
+    for (const auto &record: fin) {
+        for (const auto value: record.sequence() | hash_adaptor)
+            expected.insert(value);
+        ++expected_records;
+    }
+
+    REQUIRE(is_chunkable_fasta(compressed));
+    REQUIRE(not is_chunkable_fasta(dir / "test.fq.gz"));
+    for (const auto &file: {plain, compressed}) {
+        for (const size_t chunk_size: {1, 7, 100, 1000000}) {
+            std::set<uint64_t> actual;
+            const auto records = for_each_fasta_chunk(file, chunk_size, window - 1,
+                                                      [&](const std::vector<seqan3::dna5> &chunk) {
+                                                          for (const auto value: chunk | hash_adaptor)
+                                                              actual.insert(value);
+                                                      });
+            REQUIRE(records == expected_records);
+            REQUIRE(actual == expected);
+        }
+    }
+    std::filesystem::remove_all(dir);
+}

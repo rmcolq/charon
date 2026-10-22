@@ -11,6 +11,9 @@
 #include "index.hpp"
 #include "store_index.hpp"
 #include "input_summary.hpp"
+#include "hyperloglog.hpp"
+#include "concurrent_ibf.hpp"
+#include "fasta_chunks.hpp"
 #include "version.h"
 
 #include <plog/Log.h>
@@ -61,7 +64,8 @@ void setup_index_subcommand(CLI::App &app) {
             ->check(CLI::NonexistentPath.description(""))
             ->default_str("<prefix>");
 
-    index_subcommand->add_option("--temp", opt->tmp_dir, "Temporary directory for index construction files.")
+    index_subcommand->add_option("--temp", opt->tmp_dir,
+                                 "Unused: the index is built without temporary files. Kept so existing commands run.")
             ->type_name("DIR")
             ->default_str("<dir>");
 
@@ -101,7 +105,7 @@ void setup_index_subcommand(CLI::App &app) {
 
     index_subcommand->add_flag(
             "--stats-only", opt->stats_only,
-            "Count distinct minimisers per file and write <prefix>.stats.tsv without building the index.");
+            "Estimate distinct minimisers per file (HyperLogLog) and write <prefix>.stats.tsv without building the index.");
 
     index_subcommand->add_flag(
             "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
@@ -186,58 +190,106 @@ InputSummary parse_input_file(const std::filesystem::path &input_file) {
     return summary;
 }
 
-InputStats count_and_store_hashes(const IndexArguments &opt, const InputSummary &summary) {
-    PLOG_INFO << "Extracting hashes from files";
+namespace {
+// Input files largest first, so that a big file doesn't start last and hold up the end of a parallel pass
+std::vector<std::pair<std::string, uint8_t>> files_largest_first(const InputSummary &summary) {
+    std::vector<std::pair<uint64_t, size_t>> sizes;
+    for (size_t i = 0; i < summary.filepath_to_bin.size(); ++i) {
+        std::error_code ec;
+        const auto size = std::filesystem::file_size(summary.filepath_to_bin[i].first, ec);
+        sizes.emplace_back(ec ? 0 : size, i);
+    }
+    std::stable_sort(sizes.begin(), sizes.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+    std::vector<std::pair<std::string, uint8_t>> files;
+    for (const auto &[size, i]: sizes)
+        files.push_back(summary.filepath_to_bin[i]);
+    return files;
+}
+
+// Calls fn(path, bin) for every input file on opt.threads threads. An exception can't leave an OpenMP region,
+// so the first one is rethrown after the loop.
+template<typename function_t>
+void for_each_file(const IndexArguments &opt, const InputSummary &summary, function_t &&fn) {
+    const auto files = files_largest_first(summary);
+    std::exception_ptr error;
+#pragma omp parallel for num_threads(opt.threads) schedule(dynamic, 1)
+    for (size_t i = 0; i < files.size(); ++i) {
+        try {
+            fn(files[i].first, files[i].second);
+        } catch (const std::exception &e) {
+            PLOG_ERROR << "Error processing file " << files[i].first << ": " << e.what();
+#pragma omp critical(index_error)
+            if (not error)
+                error = std::current_exception();
+        }
+    }
+    if (error)
+        std::rethrow_exception(error);
+}
+
+// Calls fn(hash) for every minimiser of every record in the file, repeats included; returns the number of records.
+// FASTA files are read in chunks of about 1 Mbp; other formats one whole record at a time.
+template<typename function_t>
+uint64_t for_each_minimiser(const IndexArguments &opt, const std::string &fasta_file, function_t &&fn) {
     const auto hash_adaptor = seqan3::views::minimiser_hash(seqan3::shape{seqan3::ungapped{opt.kmer_size}},
                                                             seqan3::window_size{opt.window_size});
-    PLOG_DEBUG << "Defined hash adaptor";
-    InputStats stats;
-    PLOG_DEBUG << "Defined stats";
+    if (is_chunkable_fasta(fasta_file)) {
+        return for_each_fasta_chunk(fasta_file, 1 << 20, opt.window_size - 1,
+                                    [&](const std::vector<seqan3::dna5> &chunk) {
+                                        for (const auto value: chunk | hash_adaptor)
+                                            fn(value);
+                                    });
+    }
+    seqan3::sequence_file_input fin{fasta_file};
+    uint64_t record_count = 0;
+    for (const auto &record: fin) {
+        for (const auto value: record.sequence() | hash_adaptor)
+            fn(value);
+        record_count++;
+    }
+    return record_count;
+}
 
+// Streams every file's minimisers into the IBF, files in parallel. technical_bin(bin, hash) gives the IBF bin
+// of a minimiser of input bin `bin`. Bloom filter insertion is idempotent, so repeats need no de-duplication.
+template<typename technical_bin_t>
+void fill_ibf(const IndexArguments &opt, const InputSummary &summary, Index::ibf_uncompressed &ibf,
+              technical_bin_t &&technical_bin) {
+    const ConcurrentIbfInserter inserter{ibf};
+    for_each_file(opt, summary, [&](const std::string &fasta_file, const uint8_t bin) {
+        const auto record_count = for_each_minimiser(opt, fasta_file, [&](const uint64_t value) {
+            inserter.emplace(value, technical_bin(bin, value));
+        });
+        PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records to bin " << +bin;
+    });
+}
+}  // namespace
+
+InputStats count_hashes(const IndexArguments &opt, const InputSummary &summary) {
+    PLOG_INFO << "Estimating distinct minimisers per file";
+    InputStats stats;
     const auto max_num_hashes = max_num_hashes_for_fpr(opt);
     PLOG_INFO << "Maximum hashes permitted per bin for fpr rate " << opt.max_fpr << " is " << max_num_hashes;
 
-#pragma omp parallel for num_threads(opt.threads)
-    for (const auto pair: summary.filepath_to_bin) {
-        try {
-            const auto &fasta_file = pair.first;
-            const auto &bin = pair.second;
-            
-            PLOG_DEBUG << "Adding file " << fasta_file;
-            seqan3::sequence_file_input fin{fasta_file};
-            
-            auto record_count = 0;
-            ankerl::unordered_dense::set<uint64_t> hashes;
-            hashes.reserve(10000);  // Pre-allocate to reduce reallocations
-            
-            for (const auto &record: fin) {
-                const auto mh = record.sequence() | hash_adaptor | std::views::common;
-                hashes.insert(mh.begin(), mh.end());
-                record_count++;
+    for_each_file(opt, summary, [&](const std::string &fasta_file, const uint8_t bin) {
+        HyperLogLog sketch;
+        const auto record_count = for_each_minimiser(opt, fasta_file, [&](const uint64_t value) {
+            sketch.add(value);
+        });
+        const auto num_hashes = sketch.estimate();
+#pragma omp critical(index_stats)
+        {
+            stats.records_per_bin[bin] += record_count;
+            stats.num_files += 1;
+            stats.hashes_per_bin[bin] += num_hashes;
+            PLOG_INFO << "Counted file " << fasta_file << " with " << record_count << " records and about "
+                      << num_hashes << " distinct hashes for bin " << +bin;
+            if (stats.hashes_per_bin[bin] > max_num_hashes) {
+                PLOG_WARNING << "File " << fasta_file << " with " << num_hashes << " will exceed max_fpr "
+                             << opt.max_fpr;
             }
-            
-            // Thread-safe updates to shared stats
-#pragma omp critical
-            {
-                stats.records_per_bin[bin] += record_count;
-                stats.num_files += 1;
-                if (not opt.stats_only)
-                    store_hashes(std::to_string(bin), hashes, opt.tmp_dir);
-                stats.hashes_per_bin[bin] += hashes.size();
-                PLOG_INFO << "Added file " << fasta_file << " with " << record_count << " records and " << hashes.size()
-                          << " hashes to bin " << +bin;
-
-                if (stats.hashes_per_bin[bin] > max_num_hashes) {
-                    PLOG_WARNING
-                                << "File " << fasta_file << " with " << hashes.size() << " will exceed max_fpr " << opt.max_fpr;
-                }
-            }
-        } catch (const std::exception& e) {
-            PLOG_ERROR << "Error processing file " << pair.first << ": " << e.what();
-            // Re-throw to fail the build process
-            throw;
         }
-    }
+    });
 
     return stats;
 }
@@ -265,42 +317,18 @@ void write_stats(const IndexArguments &opt, const InputSummary &summary, const I
               << " hashes: current layout " << current_gb << " GB, perfectly balanced " << balanced_gb << " GB";
 }
 
-Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
-                  const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &bucket_to_bins_map) {
+Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats) {
     const auto max_num_hashes = stats.max_num_hashes();
     const auto num_bits = bin_size_in_bits(opt, max_num_hashes);
     PLOG_INFO << "Create new IBF with " << +summary.num_bins << " bins and " << +num_bits << " bits";
-    seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{summary.num_bins},
-                                         seqan3::bin_size{num_bits},
-                                         seqan3::hash_function_count{opt.num_hash}};
-
-#pragma omp parallel for
-    for (uint8_t bucket = 0; bucket < summary.num_bins; ++bucket) {
-        try {
-            const auto &bins = bucket_to_bins_map.at(bucket);
-            for (auto const &bin: bins) {
-                const auto &hashes = load_hashes(std::to_string(bin), opt.tmp_dir);
-#pragma omp critical
-                {
-                    for (auto &&value: hashes) {
-                        ibf.emplace(value, seqan3::bin_index{bucket});
-                    }
-                }
-                PLOG_DEBUG << "Added " << hashes.size() << " hashes to bin " << +bucket;
-            }
-            delete_hashes(bins, opt.tmp_dir);
-        } catch (const std::exception& e) {
-            PLOG_ERROR << "Error building bucket " << +bucket << ": " << e.what();
-            throw;  // Re-throw to ensure proper cleanup
-        }
-    }
-
-
+    Index::ibf_uncompressed ibf{seqan3::bin_count{summary.num_bins},
+                                seqan3::bin_size{num_bits},
+                                seqan3::hash_function_count{opt.num_hash}};
+    fill_ibf(opt, summary, ibf, [](const uint8_t bin, const uint64_t) { return size_t{bin}; });
     return Index(opt, summary, stats, std::move(ibf));
 }
 
-std::pair<ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>>, Layout>
-balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats) {
+Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats) {
     uint64_t total = 0;
     for (const auto &[bin, num_hashes]: stats.hashes_per_bin)
         total += num_hashes;
@@ -383,40 +411,28 @@ balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &sta
         new_stats.hashes_per_bin[static_cast<uint8_t>(group)] = group_load[group];
     summary = new_summary;
     stats = new_stats;
-    return {group_to_bins, layout};
+    return layout;
 }
 
 Index build_balanced_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
-                           const ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> &group_to_bins_map,
                            const Layout &layout) {
-    // Exact load of every technical bin (merged groups may share minimisers, so this is an upper bound for them)
-    std::vector<uint64_t> technical_bin_load(layout.num_technical_bins, 0);
-#pragma omp parallel for num_threads(opt.threads) schedule(dynamic)
+    // Layout::part is a hash, so a group's minimisers spread evenly over its parts. Group loads add up their
+    // bins' counts, so for packed groups whose bins share minimisers they are an upper bound.
+    uint64_t max_load = 0;
     for (size_t group = 0; group < layout.num_groups(); ++group) {
-        for (auto const &bin: group_to_bins_map.at(static_cast<uint8_t>(group))) {
-            const auto hashes = load_hashes(std::to_string(bin), opt.tmp_dir);
-            for (const auto value: hashes)
-                technical_bin_load[layout.technical_bin(group, value)] += 1;  // each group owns its own technical bins
-        }
+        const uint64_t parts = layout.num_parts[group];
+        max_load = std::max(max_load, (stats.hashes_per_bin.at(static_cast<uint8_t>(group)) + parts - 1) / parts);
     }
-    const auto max_load = *std::max_element(technical_bin_load.begin(), technical_bin_load.end());
     const auto num_bits = bin_size_in_bits(opt, max_load);
     PLOG_INFO << "Create new IBF with " << layout.num_technical_bins << " technical bins of " << num_bits
-              << " bits (largest technical bin holds " << max_load << " minimisers)";
-    seqan3::interleaved_bloom_filter ibf{seqan3::bin_count{layout.num_technical_bins},
-                                         seqan3::bin_size{num_bits},
-                                         seqan3::hash_function_count{opt.num_hash}};
-
-    for (size_t group = 0; group < layout.num_groups(); ++group) {
-        const auto &bins = group_to_bins_map.at(static_cast<uint8_t>(group));
-        for (auto const &bin: bins) {
-            const auto hashes = load_hashes(std::to_string(bin), opt.tmp_dir);
-            for (const auto value: hashes)
-                ibf.emplace(value, seqan3::bin_index{layout.technical_bin(group, value)});
-            PLOG_DEBUG << "Added " << hashes.size() << " hashes from bin " << +bin << " to group " << group;
-        }
-        delete_hashes(bins, opt.tmp_dir);
-    }
+              << " bits (largest technical bin holds about " << max_load << " minimisers)";
+    Index::ibf_uncompressed ibf{seqan3::bin_count{layout.num_technical_bins},
+                                seqan3::bin_size{num_bits},
+                                seqan3::hash_function_count{opt.num_hash}};
+    // After balancing, the summary's bins are the scoring groups
+    fill_ibf(opt, summary, ibf, [&](const uint8_t group, const uint64_t value) {
+        return layout.technical_bin(group, value);
+    });
     return Index(opt, summary, stats, std::move(ibf), layout);
 }
 
@@ -450,11 +466,6 @@ int index_main(IndexArguments &opt) {
     } else {
         opt.prefix = opt.input_file + ".idx";
     }
-    if (opt.tmp_dir == "") {
-        opt.tmp_dir = opt.input_file + ".tmp_idx";
-    }
-    if (not opt.stats_only)
-        std::filesystem::create_directory(opt.tmp_dir);
 
     auto args = opt.to_string();
     LOG_INFO << "Running charon index\n\nCharon version: " << SOFTWARE_VERSION << "\n" << args;
@@ -471,24 +482,19 @@ int index_main(IndexArguments &opt) {
             }
         }
     }
-    auto stats = count_and_store_hashes(opt, summary);
+    auto stats = count_hashes(opt, summary);
     if (opt.stats_only) {
         write_stats(opt, summary, stats);
         return 0;
     }
     if (opt.balance) {
-        auto [group_to_bins_map, layout] = balance_layout(opt, summary, stats);
-        store_index(opt.prefix, build_balanced_index(opt, summary, stats, group_to_bins_map, layout));
+        const auto layout = balance_layout(opt, summary, stats);
+        store_index(opt.prefix, build_balanced_index(opt, summary, stats, layout));
         return 0;
     }
 
     // Unbalanced: one IBF bin per input bin
-    ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> bucket_to_bins_map;
-    for (uint8_t bin = 0; bin < summary.num_bins; ++bin)
-        bucket_to_bins_map[bin].push_back(bin);
-    auto index = build_index(opt, summary, stats, bucket_to_bins_map);
-
-    store_index(opt.prefix, std::move(index));
+    store_index(opt.prefix, build_index(opt, summary, stats));
 
     return 0;
 }
