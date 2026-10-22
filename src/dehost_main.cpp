@@ -265,8 +265,9 @@ void setup_dehost_subcommand(CLI::App &app) {
     dehost_subcommand->add_option("-d,--dist", opt->dist, "Probability distribution to use for modelling.")
             ->type_name("STRING");
 
-    dehost_subcommand
-            ->add_option("--min_length", opt->min_length, "Minimum read length to classify.")
+    auto *min_length_option = dehost_subcommand
+            ->add_option("--min_length", opt->min_length,
+                         "Minimum read length to classify (per mate for paired reads, default 80 when paired).")
             ->type_name("INT")
             ->capture_default_str();
 
@@ -317,7 +318,8 @@ void setup_dehost_subcommand(CLI::App &app) {
             "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
 
     // Set the function that will be called when this subcommand is issued.
-    dehost_subcommand->callback([opt]() {
+    dehost_subcommand->callback([opt, min_length_option]() {
+        opt->min_length_set = min_length_option->count() > 0;
         // A failed run (e.g. the index does not fit in memory) must give a non-zero exit status
         const int status = dehost_main(*opt);
         if (status != 0)
@@ -335,8 +337,6 @@ void dehost_reads(const DehostArguments &opt, const Index &index, MemoryManager 
     );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
-    auto agent = index.agent();
-    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
@@ -401,8 +401,6 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index, MemoryM
     );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
-    auto agent = index.agent();
-    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<MyTraits> fin1{opt.read_file};
     seqan3::sequence_file_input<MyTraits> fin2{opt.read_file2};
@@ -439,6 +437,7 @@ void dehost_paired_reads(const DehostArguments &opt, const Index &index, MemoryM
                 result,
                 opt.min_length,
                 opt.threads,
+                true,  // is_dehost = true for dehost
                 total_reads_processed
             );
 
@@ -477,7 +476,8 @@ int dehost_main(DehostArguments &opt) {
 
     if (opt.read_file2 != "") {
         opt.is_paired = true;
-        opt.min_length = 80;
+        if (not opt.min_length_set)
+            opt.min_length = 80;
     }
 
     MemoryManager mem_mgr(opt.max_memory_gb > 0 ? static_cast<size_t>(opt.max_memory_gb) * 1024 : 0);

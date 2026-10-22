@@ -31,15 +31,6 @@ struct MyTraits : seqan3::sequence_file_input_default_traits_dna {
 
 [[nodiscard]] bool starts_with(std::string_view str, std::string_view prefix);
 
-void store_hashes(std::string_view target,
-                  const ankerl::unordered_dense::set<uint64_t>& hashes,
-                  const std::filesystem::path& tmp_output_folder);
-
-[[nodiscard]] std::vector<uint64_t> load_hashes(std::string_view target,
-                                  const std::filesystem::path& tmp_output_folder);
-
-void delete_hashes(const std::vector<uint8_t>& targets, const std::string& tmp_output_folder);
-
 [[nodiscard]] size_t bin_size_in_bits(const IndexArguments& opt, const uint64_t num_elements);
 
 size_t max_num_hashes_for_fpr(const IndexArguments& opt);

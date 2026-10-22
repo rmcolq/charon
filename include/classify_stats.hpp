@@ -404,7 +404,7 @@ private:
     float min_compression_;
     int8_t confidence_threshold_;
     float confidence_probability_threshold_;
-    uint8_t min_hits_;
+    uint8_t min_hits_{0};
     float host_unique_prop_lo_threshold_;
     float min_proportion_difference_;
     float min_prob_difference_;

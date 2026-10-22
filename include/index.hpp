@@ -3,8 +3,11 @@
 
 #pragma once
 
+#include <array>
 #include <string>
 #include <cinttypes>
+#include <optional>
+#include <variant>
 #include <ankerl/unordered_dense.h>
 
 #include <cereal/types/string.hpp>
@@ -15,19 +18,29 @@
 #include <index_main.hpp>
 #include <input_summary.hpp>
 #include <input_stats.hpp>
+#include <layout.hpp>
 
 
 class Index {
+public:
+    using ibf_uncompressed = seqan3::interleaved_bloom_filter<seqan3::data_layout::uncompressed>;
+    using ibf_compressed = seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed>;
+
 private:
     uint8_t window_size_{};
     uint8_t kmer_size_{};
     double max_fpr_{};
     InputSummary summary_{};
     InputStats stats_{};
-    seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> ibf_{};
+    Layout layout_{};
+    // Indexes written by Charon <= v3 store a compressed IBF and are queried compressed (as before).
+    // Newer indexes store and query the uncompressed IBF, which is much faster to query.
+    std::variant<ibf_uncompressed, ibf_compressed> ibf_{};
 
 public:
-    static constexpr uint32_t version{3u};
+    static constexpr uint32_t version{4u};
+    // Written before the cereal archive in version >= 4 files; older files start straight with the archive.
+    static constexpr std::array<char, 8> format_magic{'C', 'H', 'A', 'R', 'O', 'N', 'v', '4'};
 
     Index() = default;
 
@@ -42,13 +55,16 @@ public:
     ~Index() = default;
 
     Index(const IndexArguments &arguments, const InputSummary &summary, const InputStats &stats,
-          const seqan3::interleaved_bloom_filter<seqan3::uncompressed> &ibf) :
+          ibf_uncompressed ibf, std::optional<Layout> layout = std::nullopt) :
             window_size_{arguments.window_size},
             kmer_size_{arguments.kmer_size},
             max_fpr_{arguments.max_fpr},
             summary_{summary},
             stats_{stats},
-            ibf_(ibf) {}
+            layout_{layout.value_or(Layout::identity(summary.num_bins))},
+            ibf_(std::move(ibf)) {
+        layout_.finalise();
+    }
 
     [[nodiscard]] constexpr uint8_t window_size() const {
         return window_size_;
@@ -106,56 +122,73 @@ public:
         return summary_.bin_to_category;
     }
 
-    seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed> const &ibf() const {
-        return ibf_;
+    [[nodiscard]] const Layout &layout() const {
+        return layout_;
     }
 
-    seqan3::interleaved_bloom_filter<seqan3::data_layout::compressed>::membership_agent_type agent() const {
-        return ibf_.membership_agent();
+    [[nodiscard]] bool is_compressed() const {
+        return std::holds_alternative<ibf_compressed>(ibf_);
+    }
+
+    [[nodiscard]] size_t technical_bins() const {
+        return std::visit([](auto const &ibf) { return ibf.bin_count(); }, ibf_);
+    }
+
+    [[nodiscard]] size_t bin_size() const {
+        return std::visit([](auto const &ibf) { return ibf.bin_size(); }, ibf_);
+    }
+
+    // Calls f(agent) with a membership agent for whichever IBF layout this index holds.
+    // Call once per thread and do the per-hash work inside f: agents are not thread safe.
+    template<typename function_t>
+    void with_agent(function_t &&f) const {
+        std::visit([&](auto const &ibf) {
+            auto agent = ibf.membership_agent();
+            f(agent);
+        }, ibf_);
     }
 
     /*!\cond DEV
-     * \brief Serialisation support function.
-     * \tparam archive_t Type of `archive`; must satisfy seqan3::cereal_archive.
-     * \param[in] archive The archive being serialised from/to.
-     *
-     * \attention These functions are never called directly.
-     * \sa https://docs.seqan.de/seqan/3.2.0/group__io.html#serialisation
+     * \brief Serialisation support. Version >= 4 files (preceded by format_magic) hold the layout and
+     * a flag saying whether the IBF is compressed; older files hold a compressed IBF and no layout.
      */
-    template<seqan3::cereal_archive archive_t>
-    void CEREAL_SERIALIZE_FUNCTION_NAME(archive_t &archive) {
-        try {
-            archive(window_size_);
-            archive(kmer_size_);
-            archive(max_fpr_);
-            archive(summary_);
-            archive(stats_);
-            archive(ibf_);
-        }
-            // GCOVR_EXCL_START
-        catch (std::exception const &e) {
-            PLOG_ERROR << "Cannot read index: " + std::string{e.what()};
-            exit(1);
-        }
-
+    template<typename archive_t>
+    void save(archive_t &archive) const {
+        archive(window_size_);
+        archive(kmer_size_);
+        archive(max_fpr_);
+        archive(summary_);
+        archive(stats_);
+        archive(layout_);
+        const bool compressed = is_compressed();
+        archive(compressed);
+        std::visit([&](auto const &ibf) { archive(ibf); }, ibf_);
     }
 
-    /* \brief Serialisation support function. Do not load the actual data.
-     * \tparam archive_t Type of `archive`; must satisfy seqan3::cereal_input_archive.
-     * \param[in] archive The archive being serialised from/to.
-     *
-     * \attention These functions are never called directly.
-     * \sa https://docs.seqan.de/seqan/3.2.0/group__io.html#serialisation
-     */
-    template<seqan3::cereal_input_archive archive_t>
-    void load_parameters(archive_t &archive) {
+    template<typename archive_t>
+    void load(archive_t &archive, const bool has_magic) {
         try {
             archive(window_size_);
             archive(kmer_size_);
             archive(max_fpr_);
             archive(summary_);
             archive(stats_);
-            archive(ibf_);
+            bool compressed = true;
+            if (has_magic) {
+                archive(layout_);
+                archive(compressed);
+            } else {
+                layout_ = Layout::identity(summary_.num_bins);
+            }
+            if (compressed) {
+                ibf_compressed ibf;
+                archive(ibf);
+                ibf_ = std::move(ibf);
+            } else {
+                ibf_uncompressed ibf;
+                archive(ibf);
+                ibf_ = std::move(ibf);
+            }
         }
             // GCOVR_EXCL_START
         catch (std::exception const &e) {

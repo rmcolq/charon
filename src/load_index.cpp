@@ -1,3 +1,4 @@
+#include <array>
 #include <filesystem>
 #include <fstream>
 #include <cereal/archives/binary.hpp>
@@ -8,8 +9,18 @@
 void load_index(Index &index, std::filesystem::path const &path) {
     PLOG_INFO << "Loading index from file " << path;
     std::ifstream is{path, std::ios::binary};
+    std::array<char, Index::format_magic.size()> magic{};
+    is.read(magic.data(), magic.size());
+    const bool has_magic = is.gcount() == static_cast<std::streamsize>(magic.size()) and magic == Index::format_magic;
+    if (not has_magic) {
+        // index written by Charon <= v3: the archive starts at the beginning of the file
+        is.clear();
+        is.seekg(0);
+    }
     cereal::BinaryInputArchive iarchive{is};
-    iarchive(index);
-    PLOG_INFO << "Index loaded";
-    //PLOG_DEBUG << "Index has " << index.ibf().bin_count() << " bins and " << index.ibf().bit_size() << " bits";
+    index.load(iarchive, has_magic);
+    PLOG_INFO << "Index loaded (" << (has_magic ? "v4" : "v3") << " format, "
+              << (index.is_compressed() ? "compressed" : "uncompressed") << " IBF with "
+              << index.technical_bins() << " technical bins of " << index.bin_size() << " bits, "
+              << +index.num_bins() << " scoring bins)";
 }

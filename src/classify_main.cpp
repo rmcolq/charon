@@ -141,8 +141,6 @@ void classify_reads(const ClassifyArguments &opt, const Index &index, MemoryMana
     );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
-    auto agent = index.agent();
-    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<MyTraits> fin{opt.read_file};
     using record_type = decltype(fin)::record_type;
@@ -207,8 +205,6 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index, Mem
     );
     PLOG_VERBOSE << "Defined hash_adaptor";
 
-    auto agent = index.agent();
-    PLOG_VERBOSE << "Defined agent";
 
     seqan3::sequence_file_input<MyTraits> fin1{opt.read_file};
     seqan3::sequence_file_input<MyTraits> fin2{opt.read_file2};
@@ -245,6 +241,7 @@ void classify_paired_reads(const ClassifyArguments &opt, const Index &index, Mem
                 result,
                 opt.min_length,
                 opt.threads,
+                false,  // is_dehost = false for classify
                 total_reads_processed
             );
 

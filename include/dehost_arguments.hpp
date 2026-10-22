@@ -34,6 +34,7 @@ struct DehostArguments {
     // thresholds for filtering
     float min_quality{15.0};
     uint32_t min_length{140};
+    bool min_length_set{false};  // true when --min_length was given explicitly
     float min_compression{0};
     uint8_t confidence_threshold{7};
     float confidence_probability_threshold{0};

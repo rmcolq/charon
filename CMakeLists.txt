@@ -185,6 +185,7 @@ add_test(NAME test_input_stats COMMAND test_input_stats)
 # Test Index
 add_executable(test_index
     test/test_index.cpp
+    src/load_index.cpp
 )
 target_include_directories(test_index
     PRIVATE
