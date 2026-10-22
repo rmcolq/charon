@@ -317,8 +317,17 @@ void write_stats(const IndexArguments &opt, const InputSummary &summary, const I
               << " hashes: current layout " << current_gb << " GB, perfectly balanced " << balanced_gb << " GB";
 }
 
+// Bin heights are sized for 1 % more minimisers than estimated: the HyperLogLog estimates are about
+// 0.2 % accurate (measured 0.12-0.17 % low), and a hashed split of a group into parts adds a little
+// variation per part, so this keeps every bin at or below the target fpr.
+constexpr double sizing_margin = 1.01;
+
+static uint64_t with_sizing_margin(const uint64_t estimated_minimisers) {
+    return static_cast<uint64_t>(std::ceil(static_cast<double>(estimated_minimisers) * sizing_margin));
+}
+
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats) {
-    const auto max_num_hashes = stats.max_num_hashes();
+    const auto max_num_hashes = with_sizing_margin(stats.max_num_hashes());
     const auto num_bits = bin_size_in_bits(opt, max_num_hashes);
     PLOG_INFO << "Create new IBF with " << +summary.num_bins << " bins and " << +num_bits << " bits";
     Index::ibf_uncompressed ibf{seqan3::bin_count{summary.num_bins},
@@ -423,9 +432,10 @@ Index build_balanced_index(const IndexArguments &opt, const InputSummary &summar
         const uint64_t parts = layout.num_parts[group];
         max_load = std::max(max_load, (stats.hashes_per_bin.at(static_cast<uint8_t>(group)) + parts - 1) / parts);
     }
-    const auto num_bits = bin_size_in_bits(opt, max_load);
+    const auto num_bits = bin_size_in_bits(opt, with_sizing_margin(max_load));
     PLOG_INFO << "Create new IBF with " << layout.num_technical_bins << " technical bins of " << num_bits
-              << " bits (largest technical bin holds about " << max_load << " minimisers)";
+              << " bits (largest technical bin holds about " << max_load << " minimisers, sized for "
+              << with_sizing_margin(max_load) << ")";
     Index::ibf_uncompressed ibf{seqan3::bin_count{layout.num_technical_bins},
                                 seqan3::bin_size{num_bits},
                                 seqan3::hash_function_count{opt.num_hash}};
