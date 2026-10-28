@@ -59,10 +59,10 @@ void setup_index_subcommand(CLI::App &app) {
             ->type_name("INT")
             ->capture_default_str();
 
-    index_subcommand->add_option("-p,--prefix", opt->prefix, "Prefix for the output index.")
+    index_subcommand->add_option("-p,--prefix", opt->prefix, "Prefix for the output index (<prefix>.idx).")
             ->type_name("FILE")
             ->check(CLI::NonexistentPath.description(""))
-            ->default_str("<prefix>");
+            ->default_str("<input>.w<w>k<k>");
 
     index_subcommand->add_option("--log", opt->log_file, "File for log")
             ->transform(make_absolute)
@@ -469,7 +469,9 @@ int index_main(IndexArguments &opt) {
     if (opt.prefix != "") {
         opt.prefix += ".idx";
     } else {
-        opt.prefix = opt.input_file + ".idx";
+        // name the default output after w and k, so indexes for different profiles don't overwrite each other
+        opt.prefix = opt.input_file + ".w" + std::to_string(opt.window_size) + "k" + std::to_string(opt.kmer_size) +
+                     ".idx";
     }
 
     auto args = opt.to_string();

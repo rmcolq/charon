@@ -49,21 +49,26 @@ $ cat example.tab
 
 The index can then be built with:
 ```
-charon index -t 8 <example.tab>
+charon index -t 8 --profile nanopore <example.tab>
 ```
+
+`--profile` chooses parameters for the read technology the index will classify: `nanopore` (w 41, k 19) or
+`illumina` (w 27, k 19, a smaller window so short reads get enough minimisers). Build one index per technology you
+need. Unless `--prefix` is given, the index is written to `<example.tab>.w<w>k<k>.idx`, so the two profiles give
+`example.tab.w41k19.idx` and `example.tab.w27k19.idx`. `-w` and `-k` can also be set directly.
 
 ### Dehost
 
 Classify `reads.fq.gz` using the categories in the index (one of which must be "host" or "human"):
 
 ```
-charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz>
+charon dehost -t 8 --db <example.tab.w41k19.idx> <reads.fq.gz>
 ```
 
 Additionally extract the microbial fraction of the input dataset
 
 ```
-charon dehost -t 8 --db <example.tab.idx> <reads.fq.gz> --extract microbial --prefix <prefix>
+charon dehost -t 8 --db <example.tab.w41k19.idx> <reads.fq.gz> --extract microbial --prefix <prefix>
 ```
 
 #### Host-only index
@@ -75,7 +80,7 @@ equivalent to other host depletion tools, which also only look for the host, and
 microbial category adds.
 
 ```
-charon dehost -t 8 --db <host_only.tab.idx> <reads.fq.gz> --extract all --prefix <prefix>
+charon dehost -t 8 --db <host_only.tab.w41k19.idx> <reads.fq.gz> --extract all --prefix <prefix>
 ```
 
 Reads which are not called host are extracted as `<prefix>_non_host`. `classify` still needs at least two categories.
