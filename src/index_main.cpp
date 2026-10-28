@@ -110,7 +110,15 @@ void setup_index_subcommand(CLI::App &app) {
     index_subcommand->callback([opt, profile_option, window_option, kmer_option, fpr_option]() {
         if (profile_option->count() > 0)
             apply_profile(*opt, window_option->count() > 0, kmer_option->count() > 0, fpr_option->count() > 0);
-        index_main(*opt);
+        // Report failures (e.g. missing reference files) as an error and a non-zero exit status rather than
+        // letting the exception terminate the program
+        try {
+            index_main(*opt);
+        } catch (const std::exception &e) {
+            PLOG_ERROR << e.what();
+            std::cerr << "Error: " << e.what() << std::endl;
+            throw CLI::RuntimeError(1);
+        }
     });
 }
 
@@ -174,6 +182,20 @@ InputSummary parse_input_file(const std::filesystem::path &input_file) {
         }
     }
     input_ifstream.close();
+
+    // Check every reference file before any work starts, and report all the problems at once
+    std::string problems;
+    for (const auto &[path, bin]: summary.filepath_to_bin) {
+        std::error_code ec;
+        if (not std::filesystem::exists(path, ec))
+            problems += "\n  " + path + ": does not exist";
+        else if (not std::filesystem::is_regular_file(path, ec))
+            problems += "\n  " + path + ": is not a regular file";
+        else if (not std::ifstream{path}.is_open())
+            problems += "\n  " + path + ": cannot be read";
+    }
+    if (not problems.empty())
+        throw std::runtime_error{"Reference files listed in " + input_file.string() + " cannot be used:" + problems};
 
     summary.num_bins = next_bin;
     summary.categories.reserve(categories.size());  // Pre-allocate
