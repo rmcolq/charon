@@ -117,6 +117,14 @@ public:
         return input_summary_.category_index(category);
     }
 
+    // A read removed before classification (too short, or too low quality) gets a row of its own, so that no
+    // read of the input is missing from the table.
+    void print_filtered_read(const std::string &read_id, uint32_t length, float mean_quality, FilterReason reason) {
+        const auto line = filtered_assignment_line(read_id, length, mean_quality, reason);
+#pragma omp critical(print_result)
+        std::cout << line;
+    }
+
     uint8_t classify_read(ReadEntry &read_entry, const bool dehost = false) {
         PLOG_VERBOSE << "Classify read " << read_entry.read_id();
         if (dehost)
