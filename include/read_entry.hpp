@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <bit>
 #include <ankerl/unordered_dense.h>
+#include <seqan3/search/dream_index/interleaved_bloom_filter.hpp>
 
 #include <plog/Log.h>
 
@@ -430,5 +431,25 @@ public:
         std::cout << assignment_line(summary);
     };
 };
+
+/// Why a read was filtered out before it was classified
+enum class FilterReason { too_short, low_quality };
+
+/**
+ * @brief The line printed for a read that was filtered out before classification (too short, or too low quality)
+ *
+ * Same columns as ReadEntry::assignment_line, so the table accounts for every read of the input.
+ * Status is `F`; there is no call; num_hashes, confidence and compression were not computed; and the details
+ * column holds the reason as `filter:too_short` or `filter:low_quality`. For a pair the length is the sum of
+ * both reads.
+ */
+inline std::string filtered_assignment_line(const std::string &read_id, uint32_t length, float mean_quality,
+                                            FilterReason reason) {
+    std::ostringstream out;
+    out.precision(6);
+    out << "F\t" << read_id << "\t\t" << length << "\t0\t" << mean_quality << "\t0\tNA\t"
+        << (reason == FilterReason::too_short ? "filter:too_short" : "filter:low_quality") << "\n";
+    return out.str();
+}
 
 #endif // CHARON_ENTRY_H

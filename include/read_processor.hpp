@@ -42,6 +42,19 @@ struct ReadMetadata {
 };
 
 /**
+ * @brief Mean phred quality of a record (0 for a record without qualities)
+ */
+template<typename record_type>
+float mean_phred_quality(const record_type& record) {
+    auto qualities = record.base_qualities() |
+                     std::views::transform([](auto quality) { return seqan3::to_phred(quality); });
+    const auto n = std::ranges::size(qualities);
+    if (n == 0)
+        return 0.0f;
+    return static_cast<float>(std::accumulate(qualities.begin(), qualities.end(), 0)) / static_cast<float>(n);
+}
+
+/**
  * @brief Extract metadata from a sequence record
  * 
  * Performs early filtering to identify invalid reads before expensive hash computation.
@@ -253,6 +266,7 @@ void process_read_batch(const std::vector<record_type>& records,
                 
                 // Skip invalid reads
                 if (read_length == 0 || read_length < min_length) {
+                    result.print_filtered_read(read_id, read_length, mean_phred_quality(record), FilterReason::too_short);
                     continue;
                 }
                 
@@ -267,6 +281,7 @@ void process_read_batch(const std::vector<record_type>& records,
                 
                 // Skip low quality reads
                 if (mean_quality < min_quality) {
+                    result.print_filtered_read(read_id, read_length, mean_quality, FilterReason::low_quality);
                     continue;
                 }
                 
@@ -381,6 +396,11 @@ void process_paired_read_batch(const std::vector<record_type>& records1,
                 
                 // Skip invalid reads
                 if (length1 == 0 || length2 == 0 || length1 < min_length || length2 < min_length) {
+                    const uint32_t pair_length = length1 + length2;
+                    const float pair_quality = pair_length > 0
+                        ? (mean_phred_quality(record1) * length1 + mean_phred_quality(record2) * length2) / static_cast<float>(pair_length)
+                        : 0.0f;
+                    result.print_filtered_read(read_id, pair_length, pair_quality, FilterReason::too_short);
                     continue;
                 }
                 

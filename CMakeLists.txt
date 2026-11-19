@@ -131,6 +131,28 @@ target_link_libraries(test_utils
 
 add_test(NAME test_utils COMMAND test_utils)
 
+# Test the rows printed for filtered reads
+add_executable(test_filtered_reads
+    test/test_filtered_reads.cpp
+    test/model_defaults_stub.cpp
+)
+target_include_directories(test_filtered_reads
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
+)
+target_link_libraries(test_filtered_reads
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_filtered_reads COMMAND test_filtered_reads)
+
 # Test MemoryManager
 add_executable(test_memory_manager
     test/test_memory_manager.cpp

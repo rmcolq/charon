@@ -144,7 +144,7 @@ Options:
 ```
 Outputs:
 
-1. `[U,C]` unclassified or classified
+1. `[U,C,F]` unclassified, classified, or filtered
 2. `read_id`
 3. `call` which of the index categories it has been called as ("" if no call)
 4. `length` length of read
@@ -155,6 +155,8 @@ Outputs:
 8. `details` a space separated breakdown. For each category, lists `category_name:count_hits:proportion_of_hits_for_category:proportion_of_hits_unique_to_category:assigned_probability`. 
 
 The probability score is the relative probability of seeing the number of unique hits against this category if the read is truly from the positive distribution, rather than the negative distribution.
+
+Reads removed before classification, because they are shorter than `--min_length` (for a pair, either read) or have a mean quality below `--min_quality`, are not dropped: each has a row with status `F`, so every read of the input appears in the table. For these rows `call` is empty, `num_hashes` and `confidence_score` are 0, `compression` is `NA`, and `details` holds the reason, `filter:too_short` or `filter:low_quality`. `length` is the sum of both reads for a pair. Filtered reads are not extracted.
 
 If `extract_file` and `--prefix` specified, will output a file with a subset of input reads belonging to the names index category. Specifying `--extract all` will generate a file for both host and microbial reads (excludes unclassified, except for a host-only index where the reads which are not host are written as `non_host`).
 
