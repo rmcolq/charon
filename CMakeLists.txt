@@ -168,6 +168,21 @@ target_link_libraries(test_memory_manager
 )
 add_test(NAME test_memory_manager COMMAND test_memory_manager)
 
+# Test dehost defaults for single-end and paired reads
+add_executable(test_dehost_defaults
+    test/test_dehost_defaults.cpp
+)
+target_include_directories(test_dehost_defaults
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
+)
+target_link_libraries(test_dehost_defaults
+    PRIVATE
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_dehost_defaults COMMAND test_dehost_defaults)
+
 # Test InputSummary
 add_executable(test_input_summary
     test/test_input_summary.cpp

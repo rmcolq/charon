@@ -31,16 +31,40 @@ struct DehostArguments {
     uint16_t num_reads_to_fit{5000};
     std::string dist{"kde"};
 
-    // thresholds for filtering
+    // thresholds for filtering; defaults are for single-end (nanopore) reads
     float min_quality{15.0};
     uint32_t min_length{140};
-    bool min_length_set{false};  // true when --min_length was given explicitly
     float min_compression{0};
     uint8_t confidence_threshold{7};
     float confidence_probability_threshold{0};
-    float host_unique_prop_lo_threshold{0.05};
-    float min_proportion_difference{0.04};
+    float host_unique_prop_lo_threshold{0.04};
+    float min_proportion_difference{0.07};
     float min_prob_difference{0};
+
+    // Defaults for paired (Illumina) reads, used for any of these options not given explicitly.
+    // Chosen so that no human pair left called microbial in a real-read Illumina mixture is human by BLAST.
+    // min_length applies to each mate, so it must be below the mate length.
+    static constexpr uint32_t paired_min_length{70};
+    static constexpr float paired_min_compression{0.3};
+    static constexpr float paired_host_unique_prop_lo_threshold{0.05};
+    static constexpr float paired_min_proportion_difference{0.28};
+
+    // true when the option was given explicitly, so a paired default does not replace it
+    bool min_length_set{false};
+    bool min_compression_set{false};
+    bool host_unique_prop_lo_threshold_set{false};
+    bool min_proportion_difference_set{false};
+
+    void apply_paired_defaults() {
+        if (not min_length_set)
+            min_length = paired_min_length;
+        if (not min_compression_set)
+            min_compression = paired_min_compression;
+        if (not host_unique_prop_lo_threshold_set)
+            host_unique_prop_lo_threshold = paired_host_unique_prop_lo_threshold;
+        if (not min_proportion_difference_set)
+            min_proportion_difference = paired_min_proportion_difference;
+    }
 
 
     // General options
