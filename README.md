@@ -130,18 +130,26 @@ Options:
   --num_reads_to_fit INT                Number of reads to use to train each distribution in the model. [default: 5000]
   -d,--dist STRING                      Probability distribution to use for modelling. [default: kde]
   
-  --min_length INT                      Minimum read length to classify. [default: 140]
+  --min_length INT                      Minimum read length to classify (per mate for paired reads, default 70 when paired). [default: 140]
   --min_quality INT                     Minimum read quality to classify. [default: 15]
-  --min_compression FLOAT               Minimum read gzip compression ratio to classify (a measure of how much information is in the read. [default: 0]
-  --confidence INT                      Minimum difference between the top 2 unique hit counts. [default: 2]
-  --host_unique_prop_lo_threshold INT   Require non-host reads to have unique host proportion below this threshold for classification. [default: 0.05]
-  --min_proportion_diff FLOAT           Minimum difference between the proportion of (non-unique) kmers found in each category. [default: 0.04]
+  --min_compression FLOAT               Minimum read gzip compression ratio to classify, a measure of how much information is in the read (default 0.3 when paired). [default: 0]
+  --confidence INT                      Minimum difference between the top 2 unique hit counts. [default: 7]
+  --host_unique_prop_lo_threshold FLOAT Require non-host reads to have unique host proportion below this threshold for classification (default 0.05 when paired). [default: 0.04]
+  --min_proportion_diff FLOAT           Minimum difference between the proportion of (non-unique) kmers found in each category (default 0.28 when paired). [default: 0.07]
   --min_probability_diff FLOAT          Minimum difference between the probability found in each category. [default: 0]
   
   --log FILE                            File for log
   -t,--threads INT                      Maximum number of threads to use. [default: ]
   -v                                    Verbosity of logging. Repeat for increased verbosity
 ```
+
+The threshold defaults depend on the input. A single read file (nanopore) uses the `[default: …]` values. Paired read
+files (Illumina) use the "when paired" values for `--min_length`, `--min_compression`,
+`--host_unique_prop_lo_threshold` and `--min_proportion_diff`, unless the option is given. The paired defaults were
+chosen so that, in a real-read Illumina mixture of human, MTB and Zymo runs, no human pair left called microbial is
+human by BLAST; they cost about 0.4 points of microbial pairs there. `--min_length` applies to each mate, so it must
+be below the mate length.
+
 Outputs:
 
 1. `[U,C,F]` unclassified, classified, or filtered

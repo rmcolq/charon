@@ -2,6 +2,8 @@
 #include <iostream>
 #include <algorithm>
 #include <cinttypes>
+#include <sstream>
+#include <string>
 
 #include "dehost_main.hpp"
 #include "read_processor.hpp"
@@ -208,6 +210,16 @@ const std::vector<float> default_neg_data = {0.029661, 0.00869565, 0.0830769, 0.
                                              0.0326693, 0.0257069, 0.0371163, 0.0258519, 0.0670444,
                                              0.0401786, 0.00708215, 0.0335475, 0.030137, 0.0210084};
 
+namespace {
+/// "default <value> when paired", for option help text, so it follows the paired defaults in DehostArguments
+template<typename T>
+std::string paired_default(T value) {
+    std::ostringstream ss;
+    ss << "default " << value << " when paired";
+    return ss.str();
+}
+}
+
 void setup_dehost_subcommand(CLI::App &app) {
     auto opt = std::make_shared<DehostArguments>();
     auto *dehost_subcommand = app.add_subcommand(
@@ -267,7 +279,8 @@ void setup_dehost_subcommand(CLI::App &app) {
 
     auto *min_length_option = dehost_subcommand
             ->add_option("--min_length", opt->min_length,
-                         "Minimum read length to classify (per mate for paired reads, default 80 when paired).")
+                         "Minimum read length to classify (per mate for paired reads, " +
+                         paired_default(DehostArguments::paired_min_length) + ").")
             ->type_name("INT")
             ->capture_default_str();
 
@@ -276,9 +289,10 @@ void setup_dehost_subcommand(CLI::App &app) {
             ->type_name("INT")
             ->capture_default_str();
 
-    dehost_subcommand
+    auto *min_compression_option = dehost_subcommand
             ->add_option("--min_compression", opt->min_compression,
-                         "Minimum read gzip compression ratio to classify (a measure of how much information is in the read.")
+                         "Minimum read gzip compression ratio to classify, a measure of how much information is in the read (" +
+                         paired_default(DehostArguments::paired_min_compression) + ").")
             ->type_name("FLOAT")
             ->capture_default_str();
 
@@ -288,15 +302,17 @@ void setup_dehost_subcommand(CLI::App &app) {
             ->type_name("INT")
             ->capture_default_str();
 
-    dehost_subcommand
+    auto *host_unique_prop_lo_threshold_option = dehost_subcommand
             ->add_option("--host_unique_prop_lo_threshold", opt->host_unique_prop_lo_threshold,
-                         "Require non-host reads to have unique host proportion below this threshold for classification.")
-            ->type_name("INT")
+                         "Require non-host reads to have unique host proportion below this threshold for classification (" +
+                         paired_default(DehostArguments::paired_host_unique_prop_lo_threshold) + ").")
+            ->type_name("FLOAT")
             ->capture_default_str();
 
-    dehost_subcommand
+    auto *min_proportion_diff_option = dehost_subcommand
             ->add_option("--min_proportion_diff", opt->min_proportion_difference,
-                         "Minimum difference between the proportion of (non-unique) kmers found in each category.")
+                         "Minimum difference between the proportion of (non-unique) kmers found in each category (" +
+                         paired_default(DehostArguments::paired_min_proportion_difference) + ").")
             ->type_name("FLOAT")
             ->capture_default_str();
     dehost_subcommand
@@ -318,8 +334,12 @@ void setup_dehost_subcommand(CLI::App &app) {
             "-v", opt->verbosity, "Verbosity of logging. Repeat for increased verbosity");
 
     // Set the function that will be called when this subcommand is issued.
-    dehost_subcommand->callback([opt, min_length_option]() {
+    dehost_subcommand->callback([opt, min_length_option, min_compression_option, host_unique_prop_lo_threshold_option,
+                                 min_proportion_diff_option]() {
         opt->min_length_set = min_length_option->count() > 0;
+        opt->min_compression_set = min_compression_option->count() > 0;
+        opt->host_unique_prop_lo_threshold_set = host_unique_prop_lo_threshold_option->count() > 0;
+        opt->min_proportion_difference_set = min_proportion_diff_option->count() > 0;
         // A failed run (e.g. the index does not fit in memory) must give a non-zero exit status
         const int status = dehost_main(*opt);
         if (status != 0)
@@ -476,8 +496,7 @@ int dehost_main(DehostArguments &opt) {
 
     if (opt.read_file2 != "") {
         opt.is_paired = true;
-        if (not opt.min_length_set)
-            opt.min_length = 80;
+        opt.apply_paired_defaults();
     }
 
     MemoryManager mem_mgr(opt.max_memory_gb > 0 ? static_cast<size_t>(opt.max_memory_gb) * 1024 : 0);
