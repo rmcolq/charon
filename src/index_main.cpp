@@ -14,6 +14,7 @@
 #include "hyperloglog.hpp"
 #include "concurrent_ibf.hpp"
 #include "fasta_chunks.hpp"
+#include "index_sizing.hpp"
 #include "version.h"
 
 #include <plog/Log.h>
@@ -334,15 +335,6 @@ void write_stats(const IndexArguments &opt, const InputSummary &summary, const I
               << " hashes: current layout " << current_gb << " GB, perfectly balanced " << balanced_gb << " GB";
 }
 
-// Bin heights are sized for 1 % more minimisers than estimated: the HyperLogLog estimates are about
-// 0.2 % accurate (measured 0.12-0.17 % low), and a hashed split of a group into parts adds a little
-// variation per part, so this keeps every bin at or below the target fpr.
-constexpr double sizing_margin = 1.01;
-
-static uint64_t with_sizing_margin(const uint64_t estimated_minimisers) {
-    return static_cast<uint64_t>(std::ceil(static_cast<double>(estimated_minimisers) * sizing_margin));
-}
-
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats) {
     const auto max_num_hashes = with_sizing_margin(stats.max_num_hashes());
     const auto num_bits = bin_size_in_bits(opt, max_num_hashes);
@@ -362,8 +354,9 @@ Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputSta
                                                    : std::max<uint64_t>(1, (total + opt.technical_bins - 1) / opt.technical_bins);
     PLOG_INFO << "Balance index layout with capacity " << capacity << " minimisers per technical bin";
 
-    // A category with a lower target fpr gets a smaller capacity per technical bin: technical bins all have
-    // the height needed for `capacity` at opt.max_fpr, so loading them less lowers their fpr.
+    // A category with a lower target fpr gets a smaller capacity per technical bin: technical bins all share
+    // one height, about that needed for `capacity` at opt.max_fpr, so loading them less lowers their fpr.
+    // balanced_bin_bits sets the height so each category's bins reach their own target fpr.
     const double bin_bits = static_cast<double>(capacity) * -static_cast<double>(opt.num_hash) /
                             std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash));
     auto capacity_for = [&](const std::string &category) -> uint64_t {
@@ -442,17 +435,9 @@ Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputSta
 
 Index build_balanced_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
                            const Layout &layout) {
-    // Layout::part is a hash, so a group's minimisers spread evenly over its parts. Group loads add up their
-    // bins' counts, so for packed groups whose bins share minimisers they are an upper bound.
-    uint64_t max_load = 0;
-    for (size_t group = 0; group < layout.num_groups(); ++group) {
-        const uint64_t parts = layout.num_parts[group];
-        max_load = std::max(max_load, (stats.hashes_per_bin.at(static_cast<uint8_t>(group)) + parts - 1) / parts);
-    }
-    const auto num_bits = bin_size_in_bits(opt, with_sizing_margin(max_load));
+    const auto num_bits = balanced_bin_bits(opt, summary, stats, layout);
     PLOG_INFO << "Create new IBF with " << layout.num_technical_bins << " technical bins of " << num_bits
-              << " bits (largest technical bin holds about " << max_load << " minimisers, sized for "
-              << with_sizing_margin(max_load) << ")";
+              << " bits (sized so every category meets its target fpr)";
     Index::ibf_uncompressed ibf{seqan3::bin_count{layout.num_technical_bins},
                                 seqan3::bin_size{num_bits},
                                 seqan3::hash_function_count{opt.num_hash}};
