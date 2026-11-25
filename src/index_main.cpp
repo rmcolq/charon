@@ -14,6 +14,7 @@
 #include "hyperloglog.hpp"
 #include "concurrent_ibf.hpp"
 #include "fasta_chunks.hpp"
+#include "index_sizing.hpp"
 #include "version.h"
 
 #include <plog/Log.h>
@@ -324,23 +325,13 @@ void write_stats(const IndexArguments &opt, const InputSummary &summary, const I
     }
     const auto max_hashes = stats.max_num_hashes();
     // Bloom filter bits per element for the target fpr (uncapped, unlike bin_size_in_bits)
-    const double bits_per_element = -static_cast<double>(opt.num_hash) /
-                                    std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash));
-    const double current_gb = bits_per_element * static_cast<double>(max_hashes) * summary.num_bins / 8e9;
-    const double balanced_gb = bits_per_element * static_cast<double>(total) / 8e9;
+    const double element_bits = bits_per_element(opt.max_fpr, opt.num_hash);
+    const double current_gb = element_bits * static_cast<double>(max_hashes) * summary.num_bins / 8e9;
+    const double balanced_gb = element_bits * static_cast<double>(total) / 8e9;
     PLOG_INFO << "Wrote " << stats_file << ": " << +summary.num_bins << " bins, " << total
               << " minimisers in total, largest bin " << max_hashes;
     PLOG_INFO << "Uncompressed IBF size at fpr " << opt.max_fpr << " with " << +opt.num_hash
               << " hashes: current layout " << current_gb << " GB, perfectly balanced " << balanced_gb << " GB";
-}
-
-// Bin heights are sized for 1 % more minimisers than estimated: the HyperLogLog estimates are about
-// 0.2 % accurate (measured 0.12-0.17 % low), and a hashed split of a group into parts adds a little
-// variation per part, so this keeps every bin at or below the target fpr.
-constexpr double sizing_margin = 1.01;
-
-static uint64_t with_sizing_margin(const uint64_t estimated_minimisers) {
-    return static_cast<uint64_t>(std::ceil(static_cast<double>(estimated_minimisers) * sizing_margin));
 }
 
 Index build_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats) {
@@ -354,29 +345,23 @@ Index build_index(const IndexArguments &opt, const InputSummary &summary, InputS
     return Index(opt, summary, stats, std::move(ibf));
 }
 
-Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats) {
-    uint64_t total = 0;
-    for (const auto &[bin, num_hashes]: stats.hashes_per_bin)
-        total += num_hashes;
-    const uint64_t capacity = opt.bin_capacity > 0 ? opt.bin_capacity
-                                                   : std::max<uint64_t>(1, (total + opt.technical_bins - 1) / opt.technical_bins);
-    PLOG_INFO << "Balance index layout with capacity " << capacity << " minimisers per technical bin";
+// A balanced layout for one capacity: the layout, and the summary and stats whose bins are its groups.
+struct BalancedLayout {
+    Layout layout;
+    InputSummary summary;
+    InputStats stats;
+};
 
-    // A category with a lower target fpr gets a smaller capacity per technical bin: technical bins all have
-    // the height needed for `capacity` at opt.max_fpr, so loading them less lowers their fpr.
-    const double bin_bits = static_cast<double>(capacity) * -static_cast<double>(opt.num_hash) /
-                            std::log(1 - std::exp(std::log(opt.max_fpr) / opt.num_hash));
+// Lay out the bins with `capacity` minimisers per technical bin at opt.max_fpr. A category with a lower
+// target fpr gets a smaller capacity per technical bin: technical bins all share one height, about that
+// needed for `capacity` at opt.max_fpr, so loading them less lowers their fpr (balanced_bin_bits sets the
+// height so each category's bins reach their own target fpr).
+static BalancedLayout layout_for_capacity(const IndexArguments &opt, const InputSummary &summary,
+                                          const InputStats &stats, const uint64_t capacity) {
     auto capacity_for = [&](const std::string &category) -> uint64_t {
-        const auto it = opt.category_fpr.find(category);
-        if (it == opt.category_fpr.end() or it->second >= opt.max_fpr)
-            return capacity;
-        const double per_element = -static_cast<double>(opt.num_hash) /
-                                   std::log(1 - std::exp(std::log(it->second) / opt.num_hash));
-        return std::max<uint64_t>(1, static_cast<uint64_t>(bin_bits / per_element));
+        return std::max<uint64_t>(1, static_cast<uint64_t>(static_cast<double>(capacity) /
+                                                           category_weight(opt, category)));
     };
-    for (const auto &[category, fpr]: opt.category_fpr)
-        PLOG_INFO << "Category " << category << " uses fpr " << fpr << ": capacity " << capacity_for(category)
-                  << " minimisers per technical bin";
 
     // Pack bins smaller than the capacity together within each category (first fit decreasing);
     // larger bins keep a group of their own and are split into parts below.
@@ -385,7 +370,6 @@ Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputSta
     std::vector<uint64_t> group_load;
     std::vector<std::string> group_category;
     ankerl::unordered_dense::map<uint8_t, uint8_t> bin_to_group;
-    ankerl::unordered_dense::map<uint8_t, std::vector<uint8_t>> group_to_bins;
     for (const auto &[bin, num_hashes]: sorted_pairs) {
         const auto &category = summary.bin_to_category.at(bin);
         const auto category_capacity = capacity_for(category);
@@ -404,26 +388,22 @@ Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputSta
         }
         group_load[group] += num_hashes;
         bin_to_group[bin] = static_cast<uint8_t>(group);
-        group_to_bins[static_cast<uint8_t>(group)].push_back(bin);
     }
 
-    Layout layout;
+    BalancedLayout result;
+    auto &layout = result.layout;
     for (size_t group = 0; group < group_load.size(); ++group) {
         const auto group_capacity = capacity_for(group_category[group]);
         const auto parts = std::max<uint64_t>(1, (group_load[group] + group_capacity - 1) / group_capacity);
         layout.first_bin.push_back(static_cast<uint16_t>(layout.num_technical_bins));
         layout.num_parts.push_back(static_cast<uint16_t>(parts));
         layout.num_technical_bins += static_cast<uint32_t>(parts);
-        PLOG_DEBUG << "Group " << group << " (" << group_category[group] << ") has " << group_to_bins[group].size()
-                   << " bins, " << group_load[group] << " minimisers and " << parts << " parts";
     }
     layout.finalise();
-    PLOG_INFO << "Balanced " << +summary.num_bins << " bins into " << group_load.size() << " scoring groups and "
-              << layout.num_technical_bins << " technical bins";
 
     // Groups become the bins of the summary/stats used for scoring.
-    InputSummary new_summary;
-    InputStats new_stats;
+    auto &new_summary = result.summary;
+    auto &new_stats = result.stats;
     new_stats.num_files = stats.num_files;
     new_summary.num_bins = static_cast<uint8_t>(group_load.size());
     new_summary.categories = summary.categories;
@@ -435,24 +415,67 @@ Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputSta
     }
     for (size_t group = 0; group < group_load.size(); ++group)
         new_stats.hashes_per_bin[static_cast<uint8_t>(group)] = group_load[group];
-    summary = new_summary;
-    stats = new_stats;
-    return layout;
+    return result;
+}
+
+// The IBF stores technical bins in blocks of 64, so its size is the padded bin count times the bin height
+static uint64_t ibf_bits(const IndexArguments &opt, const BalancedLayout &candidate) {
+    const uint64_t padded_bins = (candidate.layout.num_technical_bins + 63) / 64 * 64;
+    return padded_bins * balanced_bin_bits(opt, candidate.summary, candidate.stats, candidate.layout);
+}
+
+Layout balance_layout(const IndexArguments &opt, InputSummary &summary, InputStats &stats) {
+    // A minimiser of a lower-fpr category needs category_weight times the bits of a max_fpr minimiser, so it
+    // counts that much when choosing the capacity: the layout then has about opt.technical_bins technical bins
+    // whatever the mix of categories, a host-only index included.
+    double weighted_total = 0;
+    for (const auto &[bin, num_hashes]: stats.hashes_per_bin)
+        weighted_total += static_cast<double>(num_hashes) * category_weight(opt, summary.bin_to_category.at(bin));
+    const auto base_capacity = std::max<uint64_t>(1, static_cast<uint64_t>(std::ceil(weighted_total /
+                                                                                     opt.technical_bins)));
+
+    // Each group rounds its parts up and the IBF pads the bin count to a multiple of 64, so the count that
+    // gives the smallest IBF is rarely exactly opt.technical_bins: try capacities from 0.8 to 2 times the
+    // base capacity and keep the smallest IBF (fewer technical bins on a tie). --bin-capacity fixes it.
+    uint64_t capacity = opt.bin_capacity;
+    BalancedLayout best;
+    uint64_t best_bits = 0;
+    if (capacity > 0) {
+        best = layout_for_capacity(opt, summary, stats, capacity);
+    } else {
+        for (int step = 80; step <= 200; ++step) {
+            const auto candidate_capacity = std::max<uint64_t>(1, base_capacity * step / 100);
+            auto candidate = layout_for_capacity(opt, summary, stats, candidate_capacity);
+            const auto bits = ibf_bits(opt, candidate);
+            if (best_bits == 0 or bits < best_bits or (bits == best_bits and candidate.layout.num_technical_bins <
+                                                                              best.layout.num_technical_bins)) {
+                best = std::move(candidate);
+                best_bits = bits;
+                capacity = candidate_capacity;
+            }
+        }
+    }
+    PLOG_INFO << "Balance index layout with capacity " << capacity << " minimisers per technical bin";
+    for (const auto &[category, fpr]: opt.category_fpr)
+        PLOG_INFO << "Category " << category << " uses fpr " << fpr << ": capacity "
+                  << std::max<uint64_t>(1, static_cast<uint64_t>(capacity / category_weight(opt, category)))
+                  << " minimisers per technical bin";
+    for (size_t group = 0; group < best.layout.num_groups(); ++group)
+        PLOG_DEBUG << "Group " << group << " (" << best.summary.bin_to_category.at(group) << ") has "
+                   << best.stats.hashes_per_bin.at(group) << " minimisers and " << best.layout.num_parts[group]
+                   << " parts";
+    PLOG_INFO << "Balanced " << +summary.num_bins << " bins into " << best.layout.num_groups()
+              << " scoring groups and " << best.layout.num_technical_bins << " technical bins";
+    summary = std::move(best.summary);
+    stats = std::move(best.stats);
+    return best.layout;
 }
 
 Index build_balanced_index(const IndexArguments &opt, const InputSummary &summary, InputStats &stats,
                            const Layout &layout) {
-    // Layout::part is a hash, so a group's minimisers spread evenly over its parts. Group loads add up their
-    // bins' counts, so for packed groups whose bins share minimisers they are an upper bound.
-    uint64_t max_load = 0;
-    for (size_t group = 0; group < layout.num_groups(); ++group) {
-        const uint64_t parts = layout.num_parts[group];
-        max_load = std::max(max_load, (stats.hashes_per_bin.at(static_cast<uint8_t>(group)) + parts - 1) / parts);
-    }
-    const auto num_bits = bin_size_in_bits(opt, with_sizing_margin(max_load));
+    const auto num_bits = balanced_bin_bits(opt, summary, stats, layout);
     PLOG_INFO << "Create new IBF with " << layout.num_technical_bins << " technical bins of " << num_bits
-              << " bits (largest technical bin holds about " << max_load << " minimisers, sized for "
-              << with_sizing_margin(max_load) << ")";
+              << " bits (sized so every category meets its target fpr)";
     Index::ibf_uncompressed ibf{seqan3::bin_count{layout.num_technical_bins},
                                 seqan3::bin_size{num_bits},
                                 seqan3::hash_function_count{opt.num_hash}};

@@ -181,6 +181,146 @@ TEST_CASE("Layout partitions k-mer-like hashes evenly", "[Layout]") {
     }
 }
 
+// ─── Balanced IBF height ─────────────────────────────────────────────────────
+
+#include <cmath>
+#include <tuple>
+
+#include "index_sizing.hpp"
+
+// Bloom filter false positive rate with m bits per bin, n elements and h hash functions
+static double bloom_fpr(const double m, const double n, const double h) {
+    return std::pow(1 - std::exp(-h * n / m), h);
+}
+
+// One group per entry of `groups` (category, minimisers, parts), each split into its parts
+static void make_groups(const std::vector<std::tuple<std::string, uint64_t, uint16_t>> &groups, InputSummary &summary,
+                        InputStats &stats, Layout &layout) {
+    for (const auto &[category, minimisers, parts]: groups) {
+        const auto group = static_cast<uint8_t>(layout.first_bin.size());
+        if (std::find(summary.categories.begin(), summary.categories.end(), category) == summary.categories.end())
+            summary.categories.push_back(category);
+        summary.bin_to_category[group] = category;
+        stats.hashes_per_bin[group] = minimisers;
+        layout.first_bin.push_back(static_cast<uint16_t>(layout.num_technical_bins));
+        layout.num_parts.push_back(parts);
+        layout.num_technical_bins += parts;
+    }
+    summary.num_bins = static_cast<uint8_t>(layout.first_bin.size());
+    layout.finalise();
+}
+
+#include "index_main.hpp"
+
+// Input bins as parse_input_file and count_hashes would give them: one file per (category, minimisers)
+static void make_bins(const std::vector<std::pair<std::string, uint64_t>> &bins, InputSummary &summary,
+                      InputStats &stats) {
+    for (const auto &[category, minimisers]: bins) {
+        const auto bin = summary.num_bins++;
+        if (std::find(summary.categories.begin(), summary.categories.end(), category) == summary.categories.end())
+            summary.categories.push_back(category);
+        summary.filepath_to_bin.emplace_back("file" + std::to_string(bin) + ".fa", bin);
+        summary.bin_to_category[bin] = category;
+        stats.hashes_per_bin[bin] = minimisers;
+        stats.records_per_bin[bin] = 1;
+        stats.num_files += 1;
+    }
+}
+
+TEST_CASE("Balanced layout has about --technical-bins bins whatever the categories' fpr", "[Layout][sizing]") {
+    IndexArguments opt;
+    opt.max_fpr = 0.05;
+    opt.category_fpr["human"] = 0.0005;
+    opt.technical_bins = 256;
+    std::vector<std::pair<std::string, uint64_t>> host_only, mixed;
+    for (uint64_t i = 0; i < 25; ++i)
+        host_only.emplace_back("human", 2'000'000 + 400'000 * i);
+    mixed = host_only;
+    for (uint64_t i = 0; i < 39; ++i)
+        mixed.emplace_back("microbial", 3'000'000 + 100'000 * i);
+
+    for (const auto &bins: {host_only, mixed}) {
+        INFO(bins.size() << " bins");
+        InputSummary summary;
+        InputStats stats;
+        make_bins(bins, summary, stats);
+        double ideal_bits = 0;  // every minimiser at exactly its category's bits per element, plus the margin
+        for (const auto &[category, minimisers]: bins)
+            ideal_bits += minimisers * bits_per_element(category_target_fpr(opt, category), opt.num_hash) *
+                          sizing_margin;
+        const auto layout = balance_layout(opt, summary, stats);
+        // close to --technical-bins (before the fix a host-only layout had about 5.6 times as many)
+        REQUIRE(layout.num_technical_bins >= opt.technical_bins / 2);
+        REQUIRE(layout.num_technical_bins <= 2 * opt.technical_bins);
+        const auto bits = balanced_bin_bits(opt, summary, stats, layout);
+        const double padded_bits = static_cast<double>((layout.num_technical_bins + 63) / 64 * 64) * bits;
+        INFO("technical bins " << layout.num_technical_bins << ", IBF " << padded_bits / ideal_bits << " x ideal");
+        REQUIRE(padded_bits <= 1.15 * ideal_bits);
+        for (size_t group = 0; group < layout.num_groups(); ++group) {
+            const double per_part = std::ceil(static_cast<double>(stats.hashes_per_bin.at(group)) /
+                                              layout.num_parts[group]);
+            REQUIRE(bloom_fpr(bits, per_part, opt.num_hash) <=
+                    category_target_fpr(opt, summary.bin_to_category.at(group)));
+        }
+    }
+}
+
+TEST_CASE("Host-only balanced index meets the host fpr, not max_fpr", "[Layout][sizing]") {
+    // As built by --profile nanopore from a host-only .tab: every bin is human, loaded for fpr 0.0005
+    IndexArguments opt;
+    opt.max_fpr = 0.05;
+    opt.category_fpr["human"] = 0.0005;
+    InputSummary summary;
+    InputStats stats;
+    Layout layout;
+    make_groups({{"human", 1'000'000, 5}, {"human", 800'000, 4}, {"human", 300'000, 2}}, summary, stats, layout);
+
+    const auto bits = balanced_bin_bits(opt, summary, stats, layout);
+    for (size_t group = 0; group < layout.num_groups(); ++group) {
+        const double per_part = static_cast<double>(stats.hashes_per_bin.at(group)) / layout.num_parts[group];
+        REQUIRE(bloom_fpr(bits, per_part, opt.num_hash) <= 0.0005);
+    }
+    // Sizing the fullest part at max_fpr instead gives about 0.05 (the bug this guards against)
+    REQUIRE(bloom_fpr(bin_size_in_bits(opt, with_sizing_margin(200'000)), 200'000, opt.num_hash) > 0.04);
+}
+
+TEST_CASE("Balanced index height meets every category's fpr", "[Layout][sizing]") {
+    IndexArguments opt;
+    opt.max_fpr = 0.05;
+    opt.category_fpr["human"] = 0.0005;
+    // human loaded for 0.0005 at the height microbial needs for 0.05: about 5.6 times fewer minimisers per part
+    const uint64_t microbial = 1'000'000;
+    const auto human = static_cast<uint64_t>(microbial / 5.6);
+
+    SECTION("a full microbial bin sets the height and human stays within its fpr") {
+        InputSummary summary;
+        InputStats stats;
+        Layout layout;
+        make_groups({{"microbial", microbial, 1}, {"human", 3 * human, 3}}, summary, stats, layout);
+        const auto bits = balanced_bin_bits(opt, summary, stats, layout);
+        REQUIRE(bits == bin_size_in_bits(opt, with_sizing_margin(microbial)));
+        REQUIRE(bloom_fpr(bits, microbial, opt.num_hash) <= 0.05);
+        REQUIRE(bloom_fpr(bits, human, opt.num_hash) <= 0.0005);
+    }
+    SECTION("an underfilled microbial bin does not let human exceed its fpr") {
+        InputSummary summary;
+        InputStats stats;
+        Layout layout;
+        make_groups({{"microbial", microbial / 2, 1}, {"human", 3 * human, 3}}, summary, stats, layout);
+        const auto bits = balanced_bin_bits(opt, summary, stats, layout);
+        REQUIRE(bloom_fpr(bits, human, opt.num_hash) <= 0.0005);
+        REQUIRE(bloom_fpr(bits, microbial / 2, opt.num_hash) <= 0.05);
+    }
+    SECTION("a category fpr above max_fpr does not loosen it") {
+        opt.category_fpr["microbial"] = 0.2;
+        InputSummary summary;
+        InputStats stats;
+        Layout layout;
+        make_groups({{"microbial", microbial, 1}}, summary, stats, layout);
+        REQUIRE(bloom_fpr(balanced_bin_bits(opt, summary, stats, layout), microbial, opt.num_hash) <= 0.05);
+    }
+}
+
 static std::filesystem::path temp_index_path(const std::string &name) {
     return std::filesystem::temp_directory_path() / ("charon_test_" + name + ".idx");
 }
