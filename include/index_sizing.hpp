@@ -23,12 +23,23 @@ inline uint64_t with_sizing_margin(const uint64_t estimated_minimisers) {
     return static_cast<uint64_t>(std::ceil(static_cast<double>(estimated_minimisers) * sizing_margin));
 }
 
+// Bloom filter bits per element for a target fpr with num_hash hash functions
+inline double bits_per_element(const double fpr, const uint8_t num_hash) {
+    return -static_cast<double>(num_hash) / std::log(1 - std::exp(std::log(fpr) / num_hash));
+}
+
 // A category's target fpr: its --category-fpr when that is lower than max_fpr, otherwise max_fpr.
 inline double category_target_fpr(const IndexArguments &opt, const std::string &category) {
     const auto it = opt.category_fpr.find(category);
     if (it == opt.category_fpr.end())
         return opt.max_fpr;
     return std::min(it->second, opt.max_fpr);
+}
+
+// Bits a minimiser of this category needs, relative to one at max_fpr (1 for a category at max_fpr)
+inline double category_weight(const IndexArguments &opt, const std::string &category) {
+    return bits_per_element(category_target_fpr(opt, category), opt.num_hash) /
+           bits_per_element(opt.max_fpr, opt.num_hash);
 }
 
 // Height of the technical bins of a balanced index: enough for every group's parts to meet its own
