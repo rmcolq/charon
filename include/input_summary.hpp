@@ -1,6 +1,9 @@
 #pragma once
 
+#include <algorithm>
+#include <filesystem>
 #include <string>
+#include <vector>
 
 #include <ankerl/unordered_dense.h>
 #include <cereal/types/string.hpp>
@@ -52,6 +55,49 @@ struct InputSummary {
         if (index >= categories.size())
             return "";
         return categories.at(index);
+    }
+
+    // Replace each input file path with the shortest trailing part of it that no other input file shares:
+    // the file name, or more of its directories when two files have the same name. A stored index then
+    // doesn't record where its input files were, and can be moved to another machine.
+    void shorten_filepaths() {
+        std::vector<std::vector<std::string>> components;  // directories and file name, without the root
+        components.reserve(filepath_to_bin.size());
+        for (const auto& [path, bin] : filepath_to_bin) {
+            std::vector<std::string> parts;
+            for (const auto& part : std::filesystem::path{path}.relative_path())
+                if (not part.empty() and part != ".")
+                    parts.push_back(part.string());
+            components.push_back(std::move(parts));
+        }
+        auto suffix = [&](const size_t i, const size_t length) {
+            const auto& parts = components[i];
+            std::filesystem::path result;
+            for (size_t j = parts.size() - std::min(length, parts.size()); j < parts.size(); ++j)
+                result /= parts[j];
+            return result.generic_string();
+        };
+
+        std::vector<size_t> lengths(components.size(), 1);
+        bool changed = true;
+        while (changed) {
+            changed = false;
+            ankerl::unordered_dense::map<std::string, std::vector<size_t>> by_suffix;
+            for (size_t i = 0; i < components.size(); ++i)
+                by_suffix[suffix(i, lengths[i])].push_back(i);
+            for (const auto& [name, indices] : by_suffix) {
+                if (indices.size() < 2)
+                    continue;
+                for (const auto i : indices) {
+                    if (lengths[i] < components[i].size()) {
+                        ++lengths[i];
+                        changed = true;
+                    }
+                }
+            }
+        }
+        for (size_t i = 0; i < components.size(); ++i)
+            filepath_to_bin[i].first = suffix(i, lengths[i]);
     }
 
     template<seqan3::cereal_archive archive_t>

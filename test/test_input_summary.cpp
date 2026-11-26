@@ -82,3 +82,42 @@ TEST_CASE("category_name returns empty string for empty categories",
     InputSummary s;
     REQUIRE(s.category_name(0) == "");
 }
+
+// ─── shorten_filepaths ───────────────────────────────────────────────────────
+
+static std::vector<std::string> shortened(const std::vector<std::string>& paths) {
+    InputSummary s;
+    for (size_t i = 0; i < paths.size(); ++i)
+        s.filepath_to_bin.emplace_back(paths[i], static_cast<uint8_t>(i));
+    s.shorten_filepaths();
+    std::vector<std::string> result;
+    for (const auto& [path, bin] : s.filepath_to_bin)
+        result.push_back(path);
+    return result;
+}
+
+TEST_CASE("shorten_filepaths keeps only file names when they are unique", "[InputSummary][shorten_filepaths]") {
+    REQUIRE(shortened({"/home/me/db/human_chr1.fa.gz", "/home/me/db/viruses_01.fa.gz", "relative/dir/fungi.fa"}) ==
+            std::vector<std::string>{"human_chr1.fa.gz", "viruses_01.fa.gz", "fungi.fa"});
+}
+
+TEST_CASE("shorten_filepaths adds directories to tell apart files with the same name",
+          "[InputSummary][shorten_filepaths]") {
+    REQUIRE(shortened({"/data/a/ref.fa", "/data/b/ref.fa", "/data/c/other.fa"}) ==
+            std::vector<std::string>{"a/ref.fa", "b/ref.fa", "other.fa"});
+    REQUIRE(shortened({"/x/same/ref.fa", "/y/same/ref.fa", "/z/ref.fa"}) ==
+            std::vector<std::string>{"x/same/ref.fa", "y/same/ref.fa", "z/ref.fa"});
+}
+
+TEST_CASE("shorten_filepaths handles one path ending another and duplicate paths",
+          "[InputSummary][shorten_filepaths]") {
+    REQUIRE(shortened({"/x/f.fa", "/y/x/f.fa"}) == std::vector<std::string>{"x/f.fa", "y/x/f.fa"});
+    REQUIRE(shortened({"/d/f.fa", "/d/f.fa"}) == std::vector<std::string>{"d/f.fa", "d/f.fa"});
+}
+
+TEST_CASE("shorten_filepaths keeps bins and leaves no root", "[InputSummary][shorten_filepaths]") {
+    InputSummary s;
+    s.filepath_to_bin = {{"/only.fa", 7}};
+    s.shorten_filepaths();
+    REQUIRE(s.filepath_to_bin.front() == std::pair<std::string, uint8_t>{"only.fa", 7});
+}
