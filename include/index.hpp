@@ -64,6 +64,7 @@ public:
             layout_{layout.value_or(Layout::identity(summary.num_bins))},
             ibf_(std::move(ibf)) {
         layout_.finalise();
+        summary_.shorten_filepaths();  // the stored index keeps no machine-specific input paths
     }
 
     [[nodiscard]] constexpr uint8_t window_size() const {
