@@ -59,9 +59,9 @@ set(CHARON_SOURCES
     src/main.cpp
     src/classify_main.cpp
     src/dehost_main.cpp
+    src/fetch.cpp
     src/index_main.cpp
     src/load_index.cpp
-    src/main.cpp
     src/utils.cpp
     # add new .cpp files here explicitly
 )
@@ -90,6 +90,7 @@ target_link_libraries(charon
         seqan3::seqan3
         plog::plog
         OpenMP::OpenMP_CXX
+        ZLIB::ZLIB
 )
 
 install(TARGETS charon RUNTIME DESTINATION bin)
@@ -416,3 +417,27 @@ target_link_libraries(test_integration
         Catch2::Catch2WithMain
 )
 add_test(NAME test_integration COMMAND test_integration)
+
+# Test charon fetch (served from file:// urls, so no network access; needs the curl program)
+add_executable(test_fetch
+    test/test_fetch.cpp
+    src/fetch.cpp
+)
+add_dependencies(test_fetch version charon)
+target_include_directories(test_fetch
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
+)
+target_compile_definitions(test_fetch PRIVATE ZLIB_CONST CHARON_BIN="$<TARGET_FILE:charon>")
+target_link_libraries(test_fetch
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_fetch COMMAND test_fetch)

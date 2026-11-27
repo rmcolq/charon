@@ -9,7 +9,8 @@ RUN DEBIAN_FRONTEND=noninteractive apt-get install -y \
     build-essential \
     cmake \
     git \
-    zlib1g-dev
+    zlib1g-dev \
+    curl
 RUN update-alternatives --install /usr/bin/g++ g++ /bin/g++-14 14 
 RUN update-alternatives --install /usr/bin/gcc gcc /bin/gcc-14 14
 

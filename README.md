@@ -29,12 +29,29 @@ scores which could be used to set an acceptable threshold for e.g. releasing met
 
 ### Download an Index
 
-Alternatively, a pre-built index for long reads is available via [Zenodo](https://zenodo.org/records/15398095). 
+Pre-built indexes are published on Zenodo: one record for
+[nanopore reads](https://doi.org/10.5281/zenodo.24559698) and one for
+[Illumina reads](https://doi.org/10.5281/zenodo.24531993). `charon fetch` downloads one, checks its md5 against
+Zenodo, and decompresses it:
 
-This index includes references from [HPRC](https://humanpangenome.org/) and representatives of Bacteria, Viruses, Archaea, Fungi and Sar with (mostly complete) genomes downloaded from NCBI RefSeq, including FDA-ARGOS.
-The category names are `[microbial, human]`. 
+```
+charon fetch --list                        # what is available, with download sizes
+charon fetch                               # charon_big.nanopore.idx
+charon fetch --host-only                   # charon_big_host_only.nanopore.idx, for dehost
+charon fetch --tech illumina --size small -o db/
+```
 
-The compressed index has size approximately 39GB and needs to be decompressed with gzip before use.
+- `--tech` is `nanopore` (the default) or `illumina`. `--size big` (the default) has 200 human assemblies,
+  `--size small` has 4. Each has human and microbial categories. `--host-only` gives the big index with just the human category; there is no small host-only index.
+- The download size is printed before it starts. Big nanopore is about 6.3 GB to download (7.3 GB on disk); big
+  Illumina is 28.7 GB on disk. While decompressing, both the `.gz` and the index are on disk.
+- The index is written to `-o DIR`, else `$CHARON_DB` if set, else the current directory.
+- An interrupted download resumes when you rerun the same command. Rerunning after it finishes does nothing unless
+  Zenodo has a newer version of the index; then `--force` replaces it. Where each index came from is recorded in
+  `<index>.source.tsv`.
+- `--record ID` fetches a specific Zenodo version instead of the latest, and `--keep-gz` keeps the downloaded `.gz`.
+- These indexes need Charon v1.1.7 or later; `charon fetch` checks the index format before downloading.
+- `charon fetch` downloads with the `curl` program (set `CHARON_CURL` to use one that is not on the `PATH`).
 
 ### Build an Index
 
@@ -95,7 +112,8 @@ docker pull rmcolq/charon
 
 ### Building from source
 Charon has been developed on MacOS and Unix. 
-Requires a compiler for C++14 and cmake > 3.9.
+Requires a compiler for C++20, cmake > 3.9 and zlib. `charon fetch` also needs the `curl` program at run time
+(installed on macOS and most Linux systems).
 
 ```
 git clone https://github.com/rmcolq/charon.git
