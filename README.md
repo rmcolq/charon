@@ -30,8 +30,9 @@ scores which could be used to set an acceptable threshold for e.g. releasing met
 ### Download an Index
 
 Pre-built indexes are published on Zenodo: one record for
-[nanopore reads](https://doi.org/10.5281/zenodo.24559698) and one for Illumina reads. `charon fetch` downloads one,
-checks its md5 against Zenodo, and decompresses it:
+[nanopore reads](https://doi.org/10.5281/zenodo.24559698) and one for
+[Illumina reads](https://doi.org/10.5281/zenodo.24531993). `charon fetch` downloads one, checks its md5 against
+Zenodo, and decompresses it:
 
 ```
 charon fetch --list                        # what is available, with download sizes
