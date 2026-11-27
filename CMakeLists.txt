@@ -1,7 +1,7 @@
 # =============================================================================
 # charon
 # =============================================================================
-cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
+cmake_minimum_required(VERSION 3.12 FATAL_ERROR)  # 3.12: CURL::libcurl
 
 project(charon LANGUAGES CXX)
 
@@ -35,6 +35,7 @@ add_custom_target(version
 # -----------------------------------------------------------------------------
 find_package(OpenMP REQUIRED)
 find_package(ZLIB REQUIRED)
+find_package(CURL REQUIRED)  # charon fetch
 
 set(CPM_INDENT "CMake Package Manager CPM: ")
 include(${PROJECT_SOURCE_DIR}/cmake/CPM.cmake)
@@ -59,9 +60,9 @@ set(CHARON_SOURCES
     src/main.cpp
     src/classify_main.cpp
     src/dehost_main.cpp
+    src/fetch.cpp
     src/index_main.cpp
     src/load_index.cpp
-    src/main.cpp
     src/utils.cpp
     # add new .cpp files here explicitly
 )
@@ -90,6 +91,8 @@ target_link_libraries(charon
         seqan3::seqan3
         plog::plog
         OpenMP::OpenMP_CXX
+        CURL::libcurl
+        ZLIB::ZLIB
 )
 
 install(TARGETS charon RUNTIME DESTINATION bin)
@@ -416,3 +419,29 @@ target_link_libraries(test_integration
         Catch2::Catch2WithMain
 )
 add_test(NAME test_integration COMMAND test_integration)
+
+# Test charon fetch (served from file:// urls, so no network access)
+add_executable(test_fetch
+    test/test_fetch.cpp
+    src/fetch.cpp
+)
+add_dependencies(test_fetch version charon)
+target_include_directories(test_fetch
+    PRIVATE
+        ${PROJECT_SOURCE_DIR}/include
+        ${PROJECT_SOURCE_DIR}/lib/include
+        ${gcem_SOURCE_DIR}/include
+        ${statslib_SOURCE_DIR}/include
+        ${unordered_dense_SOURCE_DIR}/include
+)
+target_compile_definitions(test_fetch PRIVATE ZLIB_CONST CHARON_BIN="$<TARGET_FILE:charon>")
+target_link_libraries(test_fetch
+    PRIVATE
+        seqan3::seqan3
+        plog::plog
+        OpenMP::OpenMP_CXX
+        CURL::libcurl
+        ZLIB::ZLIB
+        Catch2::Catch2WithMain
+)
+add_test(NAME test_fetch COMMAND test_fetch)
