@@ -11,7 +11,9 @@
 
 #include <unistd.h>
 
+#ifdef CHARON_HAVE_CURL
 #include <curl/curl.h>
+#endif
 #include <zlib.h>
 
 #include <cereal/external/rapidjson/document.h>
@@ -35,6 +37,8 @@ const std::map<std::string, std::string> &records() {
     };
     return r;
 }
+
+#ifdef CHARON_HAVE_CURL
 
 std::string user_agent() {
     return std::string{"charon/"} + SOFTWARE_VERSION + " (https://github.com/rmcolq/charon)";
@@ -81,6 +85,8 @@ size_t append_to_string(char *ptr, size_t size, size_t nmemb, void *userdata) {
     static_cast<std::string *>(userdata)->append(ptr, size * nmemb);
     return size * nmemb;
 }
+
+#endif // CHARON_HAVE_CURL
 
 std::string get_string(const rapidjson::Value &object, const char *key) {
     if (!object.IsObject())
@@ -379,6 +385,8 @@ std::optional<Source> read_source(const fs::path &index) {
     return source;
 }
 
+#ifdef CHARON_HAVE_CURL
+
 std::string http_get(const std::string &url) {
     CurlHandle handle;
     std::string body;
@@ -557,6 +565,30 @@ std::string download(const std::string &url, const fs::path &part, uint64_t expe
     return md5.hexdigest();
 }
 
+#else // no libcurl: fetch is unavailable
+
+namespace {
+[[noreturn]] void no_curl() {
+    throw std::runtime_error("This Charon was built without libcurl, so it cannot download indexes.");
+}
+} // namespace
+
+std::string http_get(const std::string &) { no_curl(); }
+
+std::string check_remote_index(const std::string &) { no_curl(); }
+
+std::string download(const std::string &, const fs::path &, uint64_t) { no_curl(); }
+
+#endif // CHARON_HAVE_CURL
+
+bool available() {
+#ifdef CHARON_HAVE_CURL
+    return true;
+#else
+    return false;
+#endif
+}
+
 namespace {
 
 /// Fetch a record, following it to its latest version unless `pinned`.
@@ -611,8 +643,8 @@ void list_indexes(const FetchArguments &opt) {
         }
         std::cout << "\n";
     }
-    std::cout << "Sizes are compressed; the decompressed index is larger. Download one with: charon fetch --tech <tech> "
-                 "[--size small|big] [--host-only]\n";
+    std::cout << "Sizes are compressed; the decompressed index is larger. Download one with: charon fetch "
+                 "[--tech nanopore|illumina] [--size big|small] [--host-only]\n";
 }
 
 int fetch_index(const FetchArguments &opt) {
@@ -700,11 +732,15 @@ int fetch_index(const FetchArguments &opt) {
 
 void setup_fetch_subcommand(CLI::App &app) {
     auto opt = std::make_shared<FetchArguments>();
-    auto *sub = app.add_subcommand("fetch", "Download a published Charon index from Zenodo.");
+    auto *sub = app.add_subcommand("fetch", fetch::available()
+                                            ? "Download a published Charon index from Zenodo."
+                                            : "Download a published Charon index from Zenodo (unavailable: this "
+                                              "Charon was built without libcurl).");
 
-    sub->add_option("--tech", opt->tech, "Read technology the index is for (required unless --list).")
+    auto *tech_option = sub->add_option("--tech", opt->tech, "Read technology the index is for.")
             ->check(CLI::IsMember(fetch::technologies()))
-            ->type_name("STRING");
+            ->type_name("STRING")
+            ->capture_default_str();
     sub->add_option("--size", opt->size, "Index size: big (200 human assemblies) or small (4).")
             ->check(CLI::IsMember({"small", "big"}))
             ->type_name("STRING")
@@ -722,13 +758,22 @@ void setup_fetch_subcommand(CLI::App &app) {
                                                "https://zenodo.org/api].")
             ->group("");  // hidden: for testing and mirrors
 
-    sub->callback([opt]() {
-        if (!opt->list && opt->tech.empty())
-            throw CLI::RequiredError("--tech (or use --list)");
+    sub->callback([opt, tech_option]() {
+        if (opt->list && tech_option->count() == 0)
+            opt->tech.clear();  // list every technology
         if (opt->host_only && opt->size == "small")
             throw CLI::ValidationError("--host-only", "there is no small host-only index; use --size big");
 
+        if (!fetch::available()) {
+            std::cerr << "This Charon was built without libcurl, so it cannot fetch indexes. Rebuild it with libcurl "
+                         "installed, or download an index yourself from Zenodo and decompress it with gunzip:\n";
+            for (const auto &tech: fetch::technologies())
+                std::cerr << "  " << tech << ": https://zenodo.org/records/" << fetch::record_for(tech) << "\n";
+            std::exit(1);
+        }
+#ifdef CHARON_HAVE_CURL
         curl_global_init(CURL_GLOBAL_DEFAULT);
+#endif
         int code = 0;
         try {
             if (opt->list)
@@ -739,7 +784,9 @@ void setup_fetch_subcommand(CLI::App &app) {
             std::cerr << "\nError: " << e.what() << "\n";
             code = 1;
         }
+#ifdef CHARON_HAVE_CURL
         curl_global_cleanup();
+#endif
         if (code != 0)
             std::exit(code);
     });

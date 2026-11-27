@@ -7,7 +7,7 @@
 
 /// Collection of all options of the fetch subcommand.
 struct FetchArguments {
-    std::string tech{};          // "nanopore" or "illumina"; empty with --list means both
+    std::string tech{"nanopore"};  // "nanopore" or "illumina"; empty means every technology (--list only)
     std::string size{"big"};     // "small" or "big"
     bool host_only{false};
     std::string outdir{};        // empty: $CHARON_DB, else the current directory

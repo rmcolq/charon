@@ -35,13 +35,13 @@ checks its md5 against Zenodo, and decompresses it:
 
 ```
 charon fetch --list                        # what is available, with download sizes
-charon fetch --tech nanopore               # charon_big.nanopore.idx
-charon fetch --tech nanopore --host-only   # charon_big_host_only.nanopore.idx, for dehost
+charon fetch                               # charon_big.nanopore.idx
+charon fetch --host-only                   # charon_big_host_only.nanopore.idx, for dehost
 charon fetch --tech illumina --size small -o db/
 ```
 
-- `--size big` (the default) has 200 human assemblies, `--size small` has 4. Each has human and microbial
-  categories. `--host-only` gives the big index with just the human category; there is no small host-only index.
+- `--tech` is `nanopore` (the default) or `illumina`. `--size big` (the default) has 200 human assemblies,
+  `--size small` has 4. Each has human and microbial categories. `--host-only` gives the big index with just the human category; there is no small host-only index.
 - The download size is printed before it starts. Big nanopore is about 6.3 GB to download (7.3 GB on disk); big
   Illumina is 28.7 GB on disk. While decompressing, both the `.gz` and the index are on disk.
 - The index is written to `-o DIR`, else `$CHARON_DB` if set, else the current directory.
@@ -110,8 +110,9 @@ docker pull rmcolq/charon
 
 ### Building from source
 Charon has been developed on MacOS and Unix. 
-Requires a compiler for C++20, cmake >= 3.12, zlib and libcurl (for `charon fetch`; on Debian/Ubuntu
-`apt install zlib1g-dev libcurl4-openssl-dev`).
+Requires a compiler for C++20, cmake >= 3.12 and zlib. libcurl is optional: it is needed for `charon fetch`
+(on Debian/Ubuntu `apt install libcurl4-openssl-dev`). Without it, cmake warns and Charon builds without the
+ability to download indexes; `-DCHARON_FETCH=OFF` builds without it on purpose.
 
 ```
 git clone https://github.com/rmcolq/charon.git

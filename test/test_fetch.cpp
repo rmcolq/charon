@@ -368,8 +368,17 @@ TEST_CASE("charon fetch from a fake Zenodo", "[fetch][cli]") {
         CHECK(run.exit_code != 0);
         CHECK_THAT(run.output, ContainsSubstring("no small host-only index"));
     }
-    SECTION("--tech is needed unless --list") {
-        CHECK(run_charon("fetch " + common).exit_code != 0);
+    SECTION("--tech defaults to nanopore") {
+        auto run = run_charon("fetch " + common);
+        INFO(run.output);
+        CHECK(run.exit_code == 0);
+        CHECK(read_file(index) == zenodo.index);
+    }
+    SECTION("--list --tech lists one technology") {
+        auto run = run_charon("fetch --list --tech nanopore --api-url " + zenodo.api());
+        CHECK(run.exit_code == 0);
+        CHECK_THAT(run.output, ContainsSubstring("charon_big.nanopore.idx.gz"));
+        CHECK_THAT(run.output, !ContainsSubstring("illumina:"));
     }
     SECTION("--list") {
         auto run = run_charon("fetch --list --api-url " + zenodo.api());

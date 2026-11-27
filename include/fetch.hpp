@@ -106,6 +106,9 @@ void write_source(const std::filesystem::path &index, const Source &source);
 
 std::optional<Source> read_source(const std::filesystem::path &index);
 
+/// False if Charon was built without libcurl; the network functions below then throw.
+bool available();
+
 // ---- network (libcurl; file:// urls work too, which the tests use) ----
 
 /// GET a url into a string. Throws RequestError.
