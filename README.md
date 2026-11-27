@@ -51,6 +51,10 @@ charon fetch --tech illumina --size small -o db/
   `<index>.source.tsv`.
 - `--record ID` fetches a specific Zenodo version instead of the latest, and `--keep-gz` keeps the downloaded `.gz`.
 - These indexes need Charon v1.1.7 or later; `charon fetch` checks the index format before downloading.
+- The assembly lists, download scripts and QC checks that built these indexes are in
+  [charon-index-build](https://github.com/rmcolq/charon-index-build) (v1.0.0). Each Zenodo record's README lists the
+  index sizes, md5s and memory needs. The earlier long-read index built with Charon v1.0.4 is still available as
+  [version 1 of the nanopore record](https://zenodo.org/records/15398095).
 - `charon fetch` downloads with the `curl` program (set `CHARON_CURL` to use one that is not on the `PATH`).
 
 ### Build an Index
