@@ -1,7 +1,7 @@
 #include <algorithm>
 #include <chrono>
-#include <cstdio>
 #include <cstdlib>
+#include <fcntl.h>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
@@ -9,19 +9,19 @@
 #include <sstream>
 #include <thread>
 
+#include <spawn.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
-#ifdef CHARON_HAVE_CURL
-#include <curl/curl.h>
-#endif
-#include <zlib.h>
-
 #include <cereal/external/rapidjson/document.h>
+#include <seqan3/contrib/stream/gz_istream.hpp>
 
 #include "fetch.hpp"
 #include "index.hpp"
 #include "md5.hpp"
 #include "version.h"
+
+extern char **environ;
 
 namespace fs = std::filesystem;
 
@@ -37,56 +37,6 @@ const std::map<std::string, std::string> &records() {
     };
     return r;
 }
-
-#ifdef CHARON_HAVE_CURL
-
-std::string user_agent() {
-    return std::string{"charon/"} + SOFTWARE_VERSION + " (https://github.com/rmcolq/charon)";
-}
-
-struct CurlHandle {
-    CURL *curl{curl_easy_init()};
-
-    CurlHandle() {
-        if (!curl)
-            throw std::runtime_error("Could not initialise libcurl");
-        curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 1L);
-        curl_easy_setopt(curl, CURLOPT_FAILONERROR, 1L);
-        curl_easy_setopt(curl, CURLOPT_USERAGENT, user_agent().c_str());
-        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 60L);
-        // treat a transfer that stalls (under 1 KB/s for 2 minutes) as failed, so it can be retried
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_LIMIT, 1024L);
-        curl_easy_setopt(curl, CURLOPT_LOW_SPEED_TIME, 120L);
-    }
-
-    ~CurlHandle() { curl_easy_cleanup(curl); }
-
-    CurlHandle(const CurlHandle &) = delete;
-
-    CurlHandle &operator=(const CurlHandle &) = delete;
-};
-
-long status_of(CURL *curl, CURLcode code) {
-    long status{0};
-    curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &status);
-    if (status == 0 && code == CURLE_FILE_COULDNT_READ_FILE)
-        status = 404;
-    return status;
-}
-
-[[noreturn]] void throw_request_error(CURL *curl, CURLcode code, const std::string &url, const char *errbuf) {
-    const long status = status_of(curl, code);
-    std::string what = "Request to " + url + " failed: ";
-    what += errbuf[0] ? errbuf : curl_easy_strerror(code);
-    throw RequestError(what, status);
-}
-
-size_t append_to_string(char *ptr, size_t size, size_t nmemb, void *userdata) {
-    static_cast<std::string *>(userdata)->append(ptr, size * nmemb);
-    return size * nmemb;
-}
-
-#endif // CHARON_HAVE_CURL
 
 std::string get_string(const rapidjson::Value &object, const char *key) {
     if (!object.IsObject())
@@ -144,6 +94,9 @@ RecordInfo parse_record(std::string_view json) {
     doc.Parse(json.data(), json.size());
     if (doc.HasParseError() || !doc.IsObject())
         throw std::runtime_error("Zenodo did not return a valid record (could not parse JSON)");
+    const std::string status = get_string(doc, "status");
+    if (status == "404" || status == "410")
+        throw RequestError("Zenodo has no such record", std::stol(status));
 
     RecordInfo record;
     record.id = get_string(doc, "id");
@@ -220,25 +173,21 @@ std::string human_size(uint64_t bytes) {
     return out.str();
 }
 
-void hash_file_prefix(Md5 &md5, const fs::path &path, uint64_t length) {
+std::string file_md5(const fs::path &path, std::optional<uint64_t> length) {
     std::ifstream in{path, std::ios::binary};
     if (!in)
         throw std::runtime_error("Could not read " + path.string());
+    uint64_t remaining = length.value_or(fs::file_size(path));
+    Md5 md5;
     std::vector<char> buffer(1 << 20);
-    while (length > 0) {
-        const auto want = static_cast<std::streamsize>(std::min<uint64_t>(buffer.size(), length));
-        in.read(buffer.data(), want);
+    while (remaining > 0) {
+        in.read(buffer.data(), static_cast<std::streamsize>(std::min<uint64_t>(buffer.size(), remaining)));
         const auto got = in.gcount();
         if (got <= 0)
             throw std::runtime_error("Unexpected end of " + path.string());
         md5.update(buffer.data(), static_cast<size_t>(got));
-        length -= static_cast<uint64_t>(got);
+        remaining -= static_cast<uint64_t>(got);
     }
-}
-
-std::string file_md5(const fs::path &path, std::optional<uint64_t> length) {
-    Md5 md5;
-    hash_file_prefix(md5, path, length.value_or(fs::file_size(path)));
     return md5.hexdigest();
 }
 
@@ -256,93 +205,36 @@ std::string check_index_start(std::string_view first_bytes) {
 
 namespace {
 
-/// Streaming gzip decompression (multi-member) that hands decompressed bytes to a sink.
-class Gunzip {
-public:
-    Gunzip() {
-        if (inflateInit2(&stream_, 15 + 32) != Z_OK)
-            throw std::runtime_error("Could not initialise zlib");
-    }
-
-    ~Gunzip() { inflateEnd(&stream_); }
-
-    Gunzip(const Gunzip &) = delete;
-
-    Gunzip &operator=(const Gunzip &) = delete;
-
-    /// Returns false once the sink asks to stop.
-    template<typename Sink>
-    bool feed(const char *data, size_t len, Sink &&sink) {
-        stream_.next_in = reinterpret_cast<const Bytef *>(data);
-        stream_.avail_in = static_cast<uInt>(len);
-        while (stream_.avail_in > 0) {
-            if (finished_) {
-                // another gzip member follows
-                inflateReset(&stream_);
-                finished_ = false;
-            }
-            stream_.next_out = reinterpret_cast<Bytef *>(out_.data());
-            stream_.avail_out = static_cast<uInt>(out_.size());
-            const int ret = inflate(&stream_, Z_NO_FLUSH);
-            if (ret != Z_OK && ret != Z_STREAM_END && ret != Z_BUF_ERROR)
-                throw std::runtime_error(std::string{"Corrupt gzip data: "} + (stream_.msg ? stream_.msg : "error"));
-            const size_t produced = out_.size() - stream_.avail_out;
-            if (produced && !sink(out_.data(), produced))
-                return false;
-            if (ret == Z_STREAM_END)
-                finished_ = true;
-            else if (ret == Z_BUF_ERROR && produced == 0)
-                break;
-        }
-        return true;
-    }
-
-    /// True if the last gzip member was complete (zlib has checked its CRC and length).
-    [[nodiscard]] bool complete() const { return finished_; }
-
-private:
-    z_stream stream_{};
-    std::vector<char> out_ = std::vector<char>(1 << 20);
-    bool finished_{false};
-};
+/// The first bytes of a gzip file, decompressed (fewer if it is shorter).
+std::string gunzip_head(const fs::path &gz, size_t n) {
+    std::ifstream in{gz, std::ios::binary};
+    seqan3::contrib::gz_istream unzipped{in};
+    std::string head(n, '\0');
+    unzipped.read(head.data(), static_cast<std::streamsize>(n));
+    head.resize(static_cast<size_t>(unzipped.gcount()));
+    return head;
+}
 
 } // namespace
 
+// The md5 of the .gz is checked before this is called: seqan3's gz_istream stops at corrupt data without saying so.
 void gunzip_index(const fs::path &gz, const fs::path &out) {
+    check_index_start(gunzip_head(gz, Index::format_magic.size()));
+
     std::ifstream in{gz, std::ios::binary};
     if (!in)
         throw std::runtime_error("Could not read " + gz.string());
+    seqan3::contrib::gz_istream unzipped{in};
     std::ofstream os{out, std::ios::binary | std::ios::trunc};
     if (!os)
         throw std::runtime_error("Could not write " + out.string());
-
-    Gunzip gunzip;
-    std::string head;
-    bool checked = false;
-    auto sink = [&](const char *data, size_t len) {
-        if (!checked) {
-            head.append(data, std::min(len, Index::format_magic.size() - head.size()));
-            if (head.size() == Index::format_magic.size()) {
-                check_index_start(head);
-                checked = true;
-            }
-        }
-        os.write(data, static_cast<std::streamsize>(len));
+    std::vector<char> buffer(1 << 20);
+    while (unzipped) {
+        unzipped.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
+        os.write(buffer.data(), unzipped.gcount());
         if (!os)
             throw std::runtime_error("Could not write " + out.string() + " (disk full?)");
-        return true;
-    };
-
-    std::vector<char> buffer(1 << 20);
-    while (in) {
-        in.read(buffer.data(), static_cast<std::streamsize>(buffer.size()));
-        if (in.gcount() > 0)
-            gunzip.feed(buffer.data(), static_cast<size_t>(in.gcount()), sink);
     }
-    if (!gunzip.complete())
-        throw std::runtime_error(gz.string() + " ends before the end of its gzip data (truncated?)");
-    if (!checked)
-        check_index_start(head);
     os.close();
     if (!os)
         throw std::runtime_error("Could not write " + out.string());
@@ -385,208 +277,141 @@ std::optional<Source> read_source(const fs::path &index) {
     return source;
 }
 
-#ifdef CHARON_HAVE_CURL
+// ---- network: run the curl program ----
+
+std::string curl_program_name();
+
+namespace {
+
+constexpr int curl_missing = -1;
+// curl exit codes (man curl)
+constexpr int curl_write_error = 23;
+constexpr int curl_range_error = 33;    // the server cannot resume
+constexpr int curl_file_missing = 37;   // file:// path does not exist
+constexpr int curl_too_large = 63;      // --max-filesize exceeded
+
+/// Run curl with these arguments (no shell) and return its exit code, or curl_missing if it could not be started.
+int run_curl(const std::vector<std::string> &args, bool quiet = false) {
+    std::vector<std::string> all{curl_program_name(), "-A", std::string{"charon/"} + SOFTWARE_VERSION, "-L",
+                                 "--connect-timeout", "60"};
+    all.insert(all.end(), args.begin(), args.end());
+    std::vector<char *> argv;
+    for (auto &a: all)
+        argv.push_back(a.data());
+    argv.push_back(nullptr);
+
+    posix_spawn_file_actions_t actions;
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, STDOUT_FILENO, "/dev/null", O_WRONLY, 0);
+    if (quiet)
+        posix_spawn_file_actions_addopen(&actions, STDERR_FILENO, "/dev/null", O_WRONLY, 0);
+    pid_t pid;
+    const int spawned = posix_spawnp(&pid, argv[0], &actions, nullptr, argv.data(), environ);
+    posix_spawn_file_actions_destroy(&actions);
+    if (spawned != 0)
+        return curl_missing;
+    int status = 0;
+    while (waitpid(pid, &status, 0) < 0)
+        if (errno != EINTR)
+            return curl_missing;
+    if (!WIFEXITED(status))
+        return 128;
+    // posix_spawnp may report a failed exec as exit status 127 rather than an error
+    return WEXITSTATUS(status) == 127 ? curl_missing : WEXITSTATUS(status);
+}
+
+[[noreturn]] void throw_curl_error(int code, const std::string &url) {
+    if (code == curl_missing)
+        throw std::runtime_error("Could not run " + curl_program_name() + ": is curl installed?");
+    if (code == curl_file_missing)
+        throw RequestError(url + " does not exist", 404);
+    throw RequestError("Downloading " + url + " failed (curl exit code " + std::to_string(code) + ")", 0);
+}
+
+/// A temporary file for a small download, removed when this goes out of scope.
+struct TempFile {
+    fs::path path;
+
+    explicit TempFile(const fs::path &dir) {
+        static int counter = 0;
+        path = dir / (".charon_fetch_" + std::to_string(::getpid()) + "_" + std::to_string(counter++));
+    }
+
+    ~TempFile() {
+        std::error_code ec;
+        fs::remove(path, ec);
+    }
+};
+
+} // namespace
+
+std::string curl_program_name() {
+    const char *env = std::getenv("CHARON_CURL");
+    return (env && *env) ? env : "curl";
+}
+
+bool available() {
+    return run_curl({"--version"}, true) == 0;
+}
 
 std::string http_get(const std::string &url) {
-    CurlHandle handle;
-    std::string body;
-    char errbuf[CURL_ERROR_SIZE] = "";
-    curl_easy_setopt(handle.curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(handle.curl, CURLOPT_ERRORBUFFER, errbuf);
-    curl_easy_setopt(handle.curl, CURLOPT_WRITEFUNCTION, append_to_string);
-    curl_easy_setopt(handle.curl, CURLOPT_WRITEDATA, &body);
-    const CURLcode code = curl_easy_perform(handle.curl);
-    if (code != CURLE_OK)
-        throw_request_error(handle.curl, code, url, errbuf);
-    return body;
+    TempFile tmp{fs::temp_directory_path()};
+    // no --fail: Zenodo explains errors in a JSON body, which parse_record reads
+    const int code = run_curl({"-sS", "-o", tmp.path.string(), url});
+    if (code != 0)
+        throw_curl_error(code, url);
+    std::ifstream in{tmp.path, std::ios::binary};
+    return {std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>()};
 }
 
 std::string check_remote_index(const std::string &url) {
-    struct State {
-        Gunzip gunzip;
-        std::string head;
-        std::string error;
-    } state;
-
-    auto write = [](char *ptr, size_t size, size_t nmemb, void *userdata) -> size_t {
-        auto &s = *static_cast<State *>(userdata);
-        try {
-            s.gunzip.feed(ptr, size * nmemb, [&](const char *data, size_t len) {
-                s.head.append(data, std::min(len, Index::format_magic.size() - s.head.size()));
-                return s.head.size() < Index::format_magic.size();
-            });
-        } catch (const std::exception &e) {
-            s.error = e.what();
-            return 0;
-        }
-        // stop as soon as the format marker has been read
-        return s.head.size() < Index::format_magic.size() ? size * nmemb : 0;
-    };
-
-    CurlHandle handle;
-    char errbuf[CURL_ERROR_SIZE] = "";
-    curl_easy_setopt(handle.curl, CURLOPT_URL, url.c_str());
-    curl_easy_setopt(handle.curl, CURLOPT_ERRORBUFFER, errbuf);
-    curl_easy_setopt(handle.curl, CURLOPT_RANGE, "0-65535");
-    curl_easy_setopt(handle.curl, CURLOPT_WRITEFUNCTION, static_cast<curl_write_callback>(write));
-    curl_easy_setopt(handle.curl, CURLOPT_WRITEDATA, &state);
-    const CURLcode code = curl_easy_perform(handle.curl);
-    if (!state.error.empty())
-        throw std::runtime_error("Could not read the start of " + url + ": " + state.error);
-    if (code != CURLE_OK && code != CURLE_WRITE_ERROR)
-        throw_request_error(handle.curl, code, url, errbuf);
-    return check_index_start(state.head);
+    TempFile tmp{fs::temp_directory_path()};
+    const int code = run_curl({"-sS", "--fail", "-r", "0-65535", "--max-filesize", "1000000", "-o",
+                               tmp.path.string(), url});
+    if (code == curl_too_large)
+        return "not checked (the server sent the whole file)";
+    if (code != 0)
+        throw_curl_error(code, url);
+    return check_index_start(gunzip_head(tmp.path, Index::format_magic.size()));
 }
-
-namespace {
-
-struct Transfer {
-    std::FILE *file{nullptr};
-    Md5 *md5{nullptr};
-    uint64_t written{0};       // bytes in the part file and in md5
-    uint64_t expected{0};
-    bool tty{false};
-    int last_decile{-1};
-    std::chrono::steady_clock::time_point last_print{};
-    std::chrono::steady_clock::time_point start{std::chrono::steady_clock::now()};
-    uint64_t start_bytes{0};
-};
-
-size_t write_part(char *ptr, size_t size, size_t nmemb, void *userdata) {
-    auto &t = *static_cast<Transfer *>(userdata);
-    const size_t len = size * nmemb;
-    if (std::fwrite(ptr, 1, len, t.file) != len)
-        return 0;
-    t.md5->update(ptr, len);
-    t.written += len;
-    return len;
-}
-
-void print_progress(Transfer &t, bool final) {
-    const auto now = std::chrono::steady_clock::now();
-    const double pct = t.expected ? 100.0 * static_cast<double>(t.written) / static_cast<double>(t.expected) : 0;
-    const double secs = std::chrono::duration<double>(now - t.start).count();
-    const double rate = secs > 0 ? static_cast<double>(t.written - t.start_bytes) / secs : 0;
-    std::ostringstream line;
-    line << "  " << human_size(t.written) << " / " << human_size(t.expected) << " (" << std::fixed
-         << std::setprecision(1) << pct << "%) " << human_size(static_cast<uint64_t>(rate)) << "/s";
-    if (t.tty) {
-        if (final || now - t.last_print > std::chrono::milliseconds(500)) {
-            std::cerr << "\r" << line.str() << "    " << (final ? "\n" : "") << std::flush;
-            t.last_print = now;
-        }
-    } else {
-        const int decile = static_cast<int>(pct / 10);
-        if (decile > t.last_decile || (final && t.last_decile < 10)) {
-            std::cerr << line.str() << "\n";
-            t.last_decile = decile;
-        }
-    }
-}
-
-int progress(void *userdata, curl_off_t, curl_off_t, curl_off_t, curl_off_t) {
-    print_progress(*static_cast<Transfer *>(userdata), false);
-    return 0;
-}
-
-} // namespace
 
 std::string download(const std::string &url, const fs::path &part, uint64_t expected_size) {
-    uint64_t have = fs::exists(part) ? fs::file_size(part) : 0;
-    if (have > expected_size) {
-        std::cerr << "Discarding " << part.string() << ": it is larger than the file on Zenodo\n";
-        fs::remove(part);
-        have = 0;
-    }
-    Md5 md5;
-    if (have > 0) {
-        std::cerr << "Resuming from " << human_size(have) << " already downloaded\n";
-        hash_file_prefix(md5, part, have);
-    }
-
-    Transfer t;
-    t.md5 = &md5;
-    t.written = have;
-    t.expected = expected_size;
-    t.tty = isatty(fileno(stderr));
-    t.start_bytes = have;
-
+    const bool tty = isatty(STDERR_FILENO);
     constexpr int max_attempts = 10;
-    for (int attempt = 1; t.written < expected_size; ++attempt) {
-        t.file = std::fopen(part.c_str(), "ab");
-        if (!t.file)
-            throw std::runtime_error("Could not write " + part.string());
-
-        CurlHandle handle;
-        char errbuf[CURL_ERROR_SIZE] = "";
-        curl_easy_setopt(handle.curl, CURLOPT_URL, url.c_str());
-        curl_easy_setopt(handle.curl, CURLOPT_ERRORBUFFER, errbuf);
-        curl_easy_setopt(handle.curl, CURLOPT_RESUME_FROM_LARGE, static_cast<curl_off_t>(t.written));
-        curl_easy_setopt(handle.curl, CURLOPT_WRITEFUNCTION, write_part);
-        curl_easy_setopt(handle.curl, CURLOPT_WRITEDATA, &t);
-        curl_easy_setopt(handle.curl, CURLOPT_NOPROGRESS, 0L);
-        curl_easy_setopt(handle.curl, CURLOPT_XFERINFOFUNCTION, progress);
-        curl_easy_setopt(handle.curl, CURLOPT_XFERINFODATA, &t);
-        const CURLcode code = curl_easy_perform(handle.curl);
-        const bool closed = std::fclose(t.file) == 0;
-        t.file = nullptr;
-        if (!closed)
-            throw std::runtime_error("Could not write " + part.string() + " (disk full?)");
-
-        if (code == CURLE_OK)
-            break;
-        if (code == CURLE_WRITE_ERROR)
-            throw std::runtime_error("Could not write " + part.string() + " (disk full?)");
-        if (code == CURLE_RANGE_ERROR) {
-            // the server would not resume: start again
-            std::cerr << "\nThe server cannot resume this download; starting again\n";
+    for (int attempt = 1;; ++attempt) {
+        const uint64_t have = fs::exists(part) ? fs::file_size(part) : 0;
+        if (have > expected_size) {
+            std::cerr << "Discarding " << part.string() << ": it is larger than the file on Zenodo\n";
             fs::remove(part);
-            md5 = Md5{};
-            t.written = 0;
-            t.start_bytes = 0;
+            continue;
         }
-        const long status = status_of(handle.curl, code);
-        const bool permanent = status >= 400 && status < 500 && status != 408 && status != 429;
-        if (permanent || attempt == max_attempts)
-            throw_request_error(handle.curl, code, url, errbuf);
-        // keep the part file consistent with what has been hashed
-        if (fs::exists(part) && fs::file_size(part) != t.written)
-            fs::resize_file(part, t.written);
+        if (have == expected_size)
+            break;
+        if (have > 0)
+            std::cerr << "Resuming from " << human_size(have) << " already downloaded\n";
+
+        // treat a transfer that stalls (under 1 KB/s for 2 minutes) as failed, so it is retried
+        const int code = run_curl({tty ? "-#" : "-sS", "--fail", "--speed-limit", "1024", "--speed-time", "120",
+                                   "-C", "-", "-o", part.string(), url});
+        if (code == 0)
+            continue;  // the size check above ends the loop
+        if (code == curl_missing || code == curl_file_missing)
+            throw_curl_error(code, url);
+        if (code == curl_write_error)
+            throw std::runtime_error("Could not write " + part.string() + " (disk full?)");
+        if (code == curl_range_error) {
+            std::cerr << "The server cannot resume this download; starting again\n";
+            fs::remove(part);
+        }
+        if (attempt == max_attempts)
+            throw_curl_error(code, url);
         const auto wait = std::chrono::seconds(std::min(60, 5 * attempt));
-        std::cerr << "\nDownload interrupted (" << (errbuf[0] ? errbuf : curl_easy_strerror(code))
-                  << "); retrying in " << wait.count() << " s (attempt " << attempt + 1 << " of " << max_attempts
-                  << ")\n";
+        std::cerr << "Download interrupted (curl exit code " << code << "); retrying in " << wait.count()
+                  << " s (attempt " << attempt + 1 << " of " << max_attempts << ")\n";
         std::this_thread::sleep_for(wait);
     }
-    print_progress(t, true);
-    if (t.written != expected_size)
-        throw std::runtime_error("Downloaded " + std::to_string(t.written) + " bytes but Zenodo lists " +
-                                 std::to_string(expected_size));
-    return md5.hexdigest();
-}
-
-#else // no libcurl: fetch is unavailable
-
-namespace {
-[[noreturn]] void no_curl() {
-    throw std::runtime_error("This Charon was built without libcurl, so it cannot download indexes.");
-}
-} // namespace
-
-std::string http_get(const std::string &) { no_curl(); }
-
-std::string check_remote_index(const std::string &) { no_curl(); }
-
-std::string download(const std::string &, const fs::path &, uint64_t) { no_curl(); }
-
-#endif // CHARON_HAVE_CURL
-
-bool available() {
-#ifdef CHARON_HAVE_CURL
-    return true;
-#else
-    return false;
-#endif
+    std::cout << "Checking md5... " << std::flush;
+    return file_md5(part);
 }
 
 namespace {
@@ -708,7 +533,7 @@ int fetch_index(const FetchArguments &opt) {
             throw std::runtime_error("md5 of the download (" + md5 + ") does not match Zenodo's (" + remote.md5 +
                                      "). The partial file has been removed; please try again.");
         }
-        std::cout << "md5 matches Zenodo\n";
+        std::cout << "matches Zenodo\n";
         fs::rename(part, gz);
     }
 
@@ -732,10 +557,7 @@ int fetch_index(const FetchArguments &opt) {
 
 void setup_fetch_subcommand(CLI::App &app) {
     auto opt = std::make_shared<FetchArguments>();
-    auto *sub = app.add_subcommand("fetch", fetch::available()
-                                            ? "Download a published Charon index from Zenodo."
-                                            : "Download a published Charon index from Zenodo (unavailable: this "
-                                              "Charon was built without libcurl).");
+    auto *sub = app.add_subcommand("fetch", "Download a published Charon index from Zenodo (uses curl).");
 
     auto *tech_option = sub->add_option("--tech", opt->tech, "Read technology the index is for.")
             ->check(CLI::IsMember(fetch::technologies()))
@@ -765,15 +587,13 @@ void setup_fetch_subcommand(CLI::App &app) {
             throw CLI::ValidationError("--host-only", "there is no small host-only index; use --size big");
 
         if (!fetch::available()) {
-            std::cerr << "This Charon was built without libcurl, so it cannot fetch indexes. Rebuild it with libcurl "
-                         "installed, or download an index yourself from Zenodo and decompress it with gunzip:\n";
+            std::cerr << "charon fetch needs the curl program, and could not run '" << fetch::curl_program_name()
+                      << "'. Install curl (or set CHARON_CURL to its path), or download an index yourself from "
+                         "Zenodo and decompress it with gunzip:\n";
             for (const auto &tech: fetch::technologies())
                 std::cerr << "  " << tech << ": https://zenodo.org/records/" << fetch::record_for(tech) << "\n";
             std::exit(1);
         }
-#ifdef CHARON_HAVE_CURL
-        curl_global_init(CURL_GLOBAL_DEFAULT);
-#endif
         int code = 0;
         try {
             if (opt->list)
@@ -784,9 +604,6 @@ void setup_fetch_subcommand(CLI::App &app) {
             std::cerr << "\nError: " << e.what() << "\n";
             code = 1;
         }
-#ifdef CHARON_HAVE_CURL
-        curl_global_cleanup();
-#endif
         if (code != 0)
             std::exit(code);
     });

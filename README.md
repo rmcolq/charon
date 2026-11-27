@@ -50,6 +50,7 @@ charon fetch --tech illumina --size small -o db/
   `<index>.source.tsv`.
 - `--record ID` fetches a specific Zenodo version instead of the latest, and `--keep-gz` keeps the downloaded `.gz`.
 - These indexes need Charon v1.1.7 or later; `charon fetch` checks the index format before downloading.
+- `charon fetch` downloads with the `curl` program (set `CHARON_CURL` to use one that is not on the `PATH`).
 
 ### Build an Index
 
@@ -110,9 +111,8 @@ docker pull rmcolq/charon
 
 ### Building from source
 Charon has been developed on MacOS and Unix. 
-Requires a compiler for C++20, cmake >= 3.12 and zlib. libcurl is optional: it is needed for `charon fetch`
-(on Debian/Ubuntu `apt install libcurl4-openssl-dev`). Without it, cmake warns and Charon builds without the
-ability to download indexes; `-DCHARON_FETCH=OFF` builds without it on purpose.
+Requires a compiler for C++20, cmake > 3.9 and zlib. `charon fetch` also needs the `curl` program at run time
+(installed on macOS and most Linux systems).
 
 ```
 git clone https://github.com/rmcolq/charon.git

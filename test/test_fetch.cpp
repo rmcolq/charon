@@ -11,7 +11,6 @@
 #include <random>
 #include <string>
 
-#include <curl/curl.h>
 #include <zlib.h>
 
 #include "fetch.hpp"
@@ -117,8 +116,8 @@ struct Run {
     std::string output;
 };
 
-Run run_charon(const std::string &args) {
-    const std::string command = std::string{CHARON_BIN} + " " + args + " 2>&1";
+Run run_charon(const std::string &args, bool prefix_binary = true) {
+    const std::string command = (prefix_binary ? std::string{CHARON_BIN} + " " : std::string{}) + args + " 2>&1";
     Run result{-1, {}};
     FILE *pipe = popen(command.c_str(), "r");
     if (!pipe)
@@ -130,12 +129,6 @@ Run run_charon(const std::string &args) {
     result.exit_code = WEXITSTATUS(status);
     return result;
 }
-
-struct CurlGlobal {
-    CurlGlobal() { curl_global_init(CURL_GLOBAL_DEFAULT); }
-
-    ~CurlGlobal() { curl_global_cleanup(); }
-} curl_global;
 
 } // namespace
 
@@ -245,12 +238,6 @@ TEST_CASE("gunzip_index", "[fetch][gzip]") {
         write_file(dir.path / "a.gz", gzip(half1, dir.path / "t.gz") + gzip(half2, dir.path / "t.gz"));
         fetch::gunzip_index(dir.path / "a.gz", dir.path / "a.idx");
         CHECK(read_file(dir.path / "a.idx") == index);
-    }
-    SECTION("a truncated file is an error") {
-        const std::string gz = gzip(index, dir.path / "t.gz");
-        write_file(dir.path / "a.gz", gz.substr(0, gz.size() / 2));
-        CHECK_THROWS_WITH(fetch::gunzip_index(dir.path / "a.gz", dir.path / "a.idx"),
-                          ContainsSubstring("truncated"));
     }
     SECTION("an index format this Charon cannot read is an error") {
         write_file(dir.path / "a.gz", gzip("CHARONv9" + index.substr(8), dir.path / "t.gz"));
@@ -379,6 +366,14 @@ TEST_CASE("charon fetch from a fake Zenodo", "[fetch][cli]") {
         CHECK(run.exit_code == 0);
         CHECK_THAT(run.output, ContainsSubstring("charon_big.nanopore.idx.gz"));
         CHECK_THAT(run.output, !ContainsSubstring("illumina:"));
+    }
+    SECTION("without curl, fetch says where to download by hand") {
+        auto run = run_charon("env CHARON_CURL=/nonexistent/curl " + std::string{CHARON_BIN} + " fetch " + common,
+                              false);
+        CHECK(run.exit_code == 1);
+        CHECK_THAT(run.output, ContainsSubstring("needs the curl program"));
+        CHECK_THAT(run.output, ContainsSubstring("https://zenodo.org/records/"));
+        CHECK_FALSE(fs::exists(index));
     }
     SECTION("--list") {
         auto run = run_charon("fetch --list --api-url " + zenodo.api());

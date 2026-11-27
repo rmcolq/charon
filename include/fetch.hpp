@@ -16,8 +16,6 @@
 #include "CLI11.hpp"
 #include "fetch_arguments.hpp"
 
-class Md5;
-
 namespace fetch {
 
 /// A file in a Zenodo record.
@@ -46,7 +44,7 @@ struct Source {
     std::string md5;  // md5 of the .gz on Zenodo
 };
 
-/// An HTTP (or file://) request that failed; status is the HTTP status, 404 for a missing file:// path, or 0.
+/// A request that failed; status is 404 (or 410) if the record or file does not exist, else 0.
 struct RequestError : std::runtime_error {
     long status;
 
@@ -89,15 +87,13 @@ std::string human_size(uint64_t bytes);
 /// Lower-case hex md5 of a file (bytes [0, length) if length is given).
 std::string file_md5(const std::filesystem::path &path, std::optional<uint64_t> length = std::nullopt);
 
-/// Feed the first `length` bytes of a file to an Md5.
-void hash_file_prefix(Md5 &md5, const std::filesystem::path &path, uint64_t length);
-
 /// Throws std::runtime_error if these leading bytes of a decompressed file are not an index this Charon can load.
 /// Returns a short description of the format, e.g. "v4".
 std::string check_index_start(std::string_view first_bytes);
 
-/// Decompress a gzip file to `out`, checking at the start that it is an index this Charon can load.
-/// Writes to `out` directly; the caller renames it into place.
+/// Decompress a gzip file to `out`, first checking that it is an index this Charon can load.
+/// Writes to `out` directly; the caller renames it into place. Check the .gz's md5 first: corrupt gzip data is not
+/// reported.
 void gunzip_index(const std::filesystem::path &gz, const std::filesystem::path &out);
 
 std::filesystem::path source_path(const std::filesystem::path &index);
@@ -106,10 +102,12 @@ void write_source(const std::filesystem::path &index, const Source &source);
 
 std::optional<Source> read_source(const std::filesystem::path &index);
 
-/// False if Charon was built without libcurl; the network functions below then throw.
-bool available();
+// ---- network: these run the curl program ($CHARON_CURL, else curl on the PATH); file:// urls work too ----
 
-// ---- network (libcurl; file:// urls work too, which the tests use) ----
+std::string curl_program_name();
+
+/// False if the curl program cannot be run.
+bool available();
 
 /// GET a url into a string. Throws RequestError.
 std::string http_get(const std::string &url);
@@ -117,7 +115,7 @@ std::string http_get(const std::string &url);
 /// Download a gzipped index's first bytes, decompress them and run check_index_start on them.
 std::string check_remote_index(const std::string &url);
 
-/// Download `url` into `part`, resuming from what `part` already holds, retrying failed transfers,
+/// Download `url` into `part`, resuming from what `part` already holds and retrying failed transfers,
 /// and return the md5 of the whole file.
 std::string download(const std::string &url, const std::filesystem::path &part, uint64_t expected_size);
 

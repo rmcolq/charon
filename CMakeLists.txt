@@ -1,7 +1,7 @@
 # =============================================================================
 # charon
 # =============================================================================
-cmake_minimum_required(VERSION 3.12 FATAL_ERROR)  # 3.12: CURL::libcurl
+cmake_minimum_required(VERSION 3.10 FATAL_ERROR)
 
 project(charon LANGUAGES CXX)
 
@@ -35,21 +35,6 @@ add_custom_target(version
 # -----------------------------------------------------------------------------
 find_package(OpenMP REQUIRED)
 find_package(ZLIB REQUIRED)
-
-# libcurl is optional: without it everything builds except downloading indexes with `charon fetch`
-option(CHARON_FETCH "Build `charon fetch` (downloads indexes from Zenodo; needs libcurl)" ON)
-if(CHARON_FETCH)
-    find_package(CURL)
-endif()
-if(CHARON_FETCH AND CURL_FOUND)
-    message(STATUS "libcurl found: `charon fetch` can download indexes")
-elseif(CHARON_FETCH)
-    message(WARNING "libcurl not found: building Charon without `charon fetch`, so it cannot download indexes "
-                    "from Zenodo. Install libcurl (e.g. apt install libcurl4-openssl-dev) and rerun cmake to "
-                    "enable it, or pass -DCHARON_FETCH=OFF to silence this warning.")
-else()
-    message(STATUS "CHARON_FETCH=OFF: building Charon without `charon fetch`")
-endif()
 
 set(CPM_INDENT "CMake Package Manager CPM: ")
 include(${PROJECT_SOURCE_DIR}/cmake/CPM.cmake)
@@ -107,10 +92,6 @@ target_link_libraries(charon
         OpenMP::OpenMP_CXX
         ZLIB::ZLIB
 )
-if(CHARON_FETCH AND CURL_FOUND)
-    target_compile_definitions(charon PRIVATE CHARON_HAVE_CURL)
-    target_link_libraries(charon PRIVATE CURL::libcurl)
-endif()
 
 install(TARGETS charon RUNTIME DESTINATION bin)
 
@@ -437,8 +418,7 @@ target_link_libraries(test_integration
 )
 add_test(NAME test_integration COMMAND test_integration)
 
-# Test charon fetch (served from file:// urls, so no network access); needs libcurl
-if(CHARON_FETCH AND CURL_FOUND)
+# Test charon fetch (served from file:// urls, so no network access; needs the curl program)
 add_executable(test_fetch
     test/test_fetch.cpp
     src/fetch.cpp
@@ -452,15 +432,12 @@ target_include_directories(test_fetch
         ${statslib_SOURCE_DIR}/include
         ${unordered_dense_SOURCE_DIR}/include
 )
-target_compile_definitions(test_fetch PRIVATE ZLIB_CONST CHARON_HAVE_CURL CHARON_BIN="$<TARGET_FILE:charon>")
+target_compile_definitions(test_fetch PRIVATE ZLIB_CONST CHARON_BIN="$<TARGET_FILE:charon>")
 target_link_libraries(test_fetch
     PRIVATE
         seqan3::seqan3
         plog::plog
         OpenMP::OpenMP_CXX
-        CURL::libcurl
-        ZLIB::ZLIB
         Catch2::Catch2WithMain
 )
 add_test(NAME test_fetch COMMAND test_fetch)
-endif()
